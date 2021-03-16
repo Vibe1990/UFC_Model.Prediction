@@ -18,6 +18,14 @@ library(mlr) # For machine learning in r
 ufc = read.csv("ufc-master.csv") # Historic data set
 UFC_258 = read.csv('upcoming-event.csv') # "upcoming" fight data set for model evaluation 
 
+# Setting up parallel computing to allow some of the process to speed up
+
+no_cores = detectCores() - 1 # Find out the number of CPU processors you have in your device and use 1 less so as to avoid having R crash 
+cl = makePSOCKcluster(no_cores)
+registerDoParallel(cl)
+
+### on.exit(stopCluster(cl)) # Used to shut down parallel computing (may need it at some point of analysis since some crashing can occur)
+
 # Processing + Data Engineering 
 
 # Date
@@ -284,3 +292,4 @@ UFC_258_clean = UFC_258.copy %>%
   select(Winner, finish, finish_details, total_fight_time_secs, R_fighter, B_fighter, R_match_weightclass_rank, B_match_weightclass_rank, better_rank, rank_dif, weight_class, gender, date, location, country, is_foreign, title_bout, empty_arena, R_odds, B_odds, odds_dif, R_ev, B_ev, ev_dif, R_wins, B_wins, win_dif, R_current_win_streak, B_current_win_streak, win_streak_dif, R_longest_win_streak, B_longest_win_streak, longest_win_streak_dif, R_draw, B_draw, draw_dif, R_losses, B_losses, loss_dif, R_current_lose_streak, B_current_lose_streak, lose_streak_dif, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, KO.TKO.Doctor_Stoppage_win_dif, R_win_by_Submission, B_win_by_Submission, sub_win_dif, R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, dec_dif, R_age, B_age, age_dif, R_Height_cms, B_Height_cms, height_dif, R_Reach_cms, B_Reach_cms, reach_dif, R_Stance, B_Stance, stance_comparison, R_avg_SIG_STR_landed, B_avg_SIG_STR_landed, sig_str_dif, R_avg_SIG_STR_pct, B_avg_SIG_STR_pct, avg_str_pct, R_avg_TD_landed, B_avg_TD_landed, avg_td_dif, R_avg_TD_pct, B_avg_TD_pct, avg_td_pct, R_avg_SUB_ATT, B_avg_SUB_ATT, avg_sub_att_dif, R_total_rounds_fought, B_total_rounds_fought, total_round_dif, R_total_title_bouts, B_total_title_bouts, total_title_bout_dif)  
 
 UFC_258_clean
+
