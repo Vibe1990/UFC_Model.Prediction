@@ -1,0 +1,19 @@
+# Code used to make boxplot graphic showing betting odds between fighters differentiated by winners
+
+UFC %>% 
+  pivot_longer(
+    c(R_odds, B_odds), names_to = "red_or_blue", values_to = "betting_odds"
+  ) %>% 
+  ggplot(
+    aes(x = red_or_blue, y = betting_odds, fill = red_or_blue)
+  ) +
+  geom_boxplot(color = 'black') + 
+  scale_fill_manual(values = c("R_odds" = "Red", "B_odds" = "Blue")) + 
+  theme_classic() + 
+  theme(
+    axis.text = element_text(color = 'black')
+  ) + 
+  labs(x = "Corner", y = "Betting Odds") + 
+  guides(fill = F) + 
+  scale_y_continuous(breaks = seq(from = - 2000, to = 1500, by = 100)) + 
+  facet_wrap(vars(Winner))
