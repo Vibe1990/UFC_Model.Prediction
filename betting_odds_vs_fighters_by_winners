@@ -1,3 +1,16 @@
+# Comparing wins b/t red and blue corner 
+
+UFC %>% 
+  ggplot(aes(x = Winner, y = constant_1, fill = Winner)) + 
+  geom_bar(stat = 'identity') + 
+  scale_fill_manual(values = c("Red" = "firebrick2", "Blue" = "skyblue")) + 
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black")) + 
+  guides(fill = F) + 
+  labs(x = "Winners", y = "Number of Fights")
+  
+  
+
 # Code used to make boxplot graphic showing betting odds between fighters differentiated by winners
 
 UFC %>% 
