@@ -1,0 +1,286 @@
+# Packages that I used for the analysis 
+
+library(tidyverse) # Contains a lot of packages necessary for piplining, plotting, etc.
+library(ranger) # A faster engine for Random Forest models 
+library(parallel)
+library(doParallel) # Will need it for parallel computation to optimize hyperparameters 
+library(xgboost) # For extreme gradient boost modeling 
+library(rpart) # For classification modeling 
+library(rpart.plot) # Used to plot a decision tree
+library(class) # For k-Nearest Neighbour modeling 
+library(corrr) # For correlation
+library(ggcorrplot) # For plotting correlation matrix
+library(caret) # Used to make training models 
+library(mlr) # For machine learning in r
+
+# reading the data sets
+
+ufc = read.csv("ufc-master.csv") # Historic data set
+UFC_258 = read.csv('upcoming-event.csv') # "upcoming" fight data set for model evaluation 
+
+# Processing + Data Engineering 
+
+# Date
+
+ufc$date = gsub("/", "-", ufc$date) # replaces the "/" with "-"
+ufc$date = lubridate::mdy(ufc$date) # converts the date variable from character to a date
+UFC_258$date = gsub("/", "-", UFC_258$date)
+UFC_258$date = lubridate::mdy(UFC_258$date)
+
+# Country
+
+ufc$country = trimws(ufc$country, which = 'both')
+ufc = ufc %>% mutate(country = as.factor(country)) %>% mutate(country = relevel(country, ref = "USA"))
+UFC_258$country = trimws(UFC_258$country, which = 'both')
+UFC_258 = UFC_258 %>% mutate(country = as.factor(country)) %>% mutate(country = relevel(country, ref = "USA"))
+
+# Gender
+
+ufc$gender = as.factor(ufc$gender)
+ufc$gender = relevel(ufc$gender, ref = "MALE")
+UFC_258$gender = as.factor(UFC_258$gender)
+UFC_258$gender = relevel(UFC_258$gender, ref = "MALE")
+
+# Stance 
+
+ufc$B_Stance = trimws(ufc$B_Stance, which = 'both')
+ufc$R_Stance = trimws(ufc$R_Stance, which = 'both')
+ufc = ufc %>% mutate(R_Stance = as.factor(R_Stance), B_Stance = as.factor(B_Stance))
+ufc = ufc %>% mutate(R_Stance = relevel(R_Stance, ref = "Orthodox"), B_Stance = relevel(B_Stance, ref = "Orthodox"))
+
+UFC_258$B_Stance = trimws(UFC_258$B_Stance, which = 'both')
+UFC_258$R_Stance = trimws(UFC_258$R_Stance, which = 'both')
+UFC_258 = UFC_258 %>% mutate(R_Stance = as.factor(R_Stance), B_Stance = as.factor(B_Stance))
+UFC_258 = UFC_258 %>% mutate(R_Stance = relevel(R_Stance, ref = "Orthodox"), B_Stance = relevel(B_Stance, ref = "Orthodox"))
+
+# Location
+
+ufc = ufc %>% mutate(location = as.factor(location))
+ufc = ufc %>% mutate(location = relevel(location, ref = "Las Vegas, Nevada, USA"))
+UFC_258 = UFC_258 %>% mutate(location = as.factor(location))
+UFC_258 = UFC_258 %>% mutate(location = relevel(location, ref = "Las Vegas, Nevada, USA"))
+
+# Weight Class
+
+ufc = ufc %>% mutate(weight_class = as.factor(weight_class)) %>% mutate(weight_class = relevel(weight_class, ref = "Catch Weight"))
+UFC_258 = UFC_258 %>% mutate(weight_class = as.factor(weight_class)) %>% mutate(weight_class = relevel(weight_class, ref = "Catch Weight"))
+
+# Finish & Finish Details
+
+ufc = ufc %>% mutate(finish = as.factor(finish))
+ufc = ufc %>% filter(finish != "DQ") %>% filter(finish != "Overturned")
+ufc = ufc %>% mutate(finish = ifelse(c(finish == "M-DEC" | finish == "U-DEC"), "DEC",
+                              ifelse(finish == "KO/TKO", "KO/TKO",
+                              ifelse(finish == "SUB", "SUB",
+                              ifelse(finish == "S-DEC", "S-DEC", NA)))))
+ufc = ufc %>% mutate(finish = as.factor(finish)) %>% mutate(finish = relevel(finish, ref = "S-DEC"))
+
+ufc = ufc %>% 
+  mutate(
+    finish_details = ifelse(finish_details == "", "Decision", 
+                     ifelse(finish_details == "Anaconda Choke", "Choke", 
+                     ifelse(finish_details == "Ankle Lock", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Arm Triangle", "Choke",
+                     ifelse(finish_details == "Armbar", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Body Triangle", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Corner Stoppage", "Intervention", 
+                     ifelse(finish_details == "D'Arce Choke", "Choke", 
+                     ifelse(finish_details == "Doctor Stoppage", "Intervention", 
+                     ifelse(finish_details == "Elbow", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Elbows", "Punch/Elbow/Slam", 
+                     ifelse(finish_details == "Flying Knee", "Kick/Knee", 
+                     ifelse(finish_details == "Forearm Choke", "Choke", 
+                     ifelse(finish_details == "Guillotine Choke", "Choke", 
+                     ifelse(finish_details == "Heel Hook", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Injury", "Intervention", 
+                     ifelse(finish_details == "Japanese Necktie", "Choke",
+                     ifelse(finish_details == "Keylock", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Kick", "Kick/Knee", 
+                     ifelse(finish_details == "Kicks", "Kick/Knee",
+                     ifelse(finish_details == "Kimura", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Knee", "Kick/Knee",
+                     ifelse(finish_details == "Kneebar", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Knees", "Kick/Knee",
+                     ifelse(finish_details == "Neck Crank", "Upperbody Joint Lock",
+                     ifelse(finish_details == "North-South Choke", "Choke",
+                     ifelse(finish_details == "Omoplata", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Other - Choke", "Choke",
+                     ifelse(finish_details == "Other - Lock", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Calf Slicer", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Face Crank", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Peruvian Necktie", "Choke",
+                     ifelse(finish_details == "Punch", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Punches", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Rear Naked Choke", "Choke",
+                     ifelse(finish_details == "Scarf Hold Choke", "Choke",
+                     ifelse(finish_details == "Slam", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Spinning Back Fist", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Spinning Back Kick", "Kick/Knee",
+                     ifelse(finish_details == "Triangle Choke", "Choke",
+                     ifelse(finish_details == "Twister", "Upperbody Joint Lock",
+                     ifelse(finish_details == "Von Flue Choke", "Choke", NA))))))))))))))))))))))))))))))))))))))))))
+  ) 
+
+ufc = ufc %>% mutate(finish_details = as.factor(finish_details)) %>% mutate(finish_details = relevel(finish_details, ref = "Decision"))
+
+# Rankings 
+
+ufc = ufc %>% mutate(better_rank = as.factor(better_rank)) %>% mutate(better_rank = relevel(better_rank, ref = "neither"))
+UFC_258 = UFC_258 %>% mutate(better_rank = as.factor(better_rank)) %>% mutate(better_rank = relevel(better_rank, ref = "neither"))
+
+
+# Engineering Variables - Win differentials 
+
+ufc = ufc %>% mutate(
+  KO.TKO.Doctor_Stoppage_win_dif = (B_win_by_KO.TKO + B_win_by_TKO_Doctor_Stoppage) - (R_win_by_KO.TKO + R_win_by_TKO_Doctor_Stoppage),
+  sub_win_dif = (B_win_by_Submission - R_win_by_Submission), 
+  dec_dif = (B_win_by_Decision_Majority + B_win_by_Decision_Unanimous + B_win_by_Decision_Split) - (R_win_by_Decision_Majority + R_win_by_Decision_Unanimous + R_win_by_Decision_Split)
+)
+
+UFC_258 = UFC_258 %>% mutate(
+  KO.TKO.Doctor_Stoppage_win_dif = (B_win_by_KO.TKO + B_win_by_TKO_Doctor_Stoppage) - (R_win_by_KO.TKO + R_win_by_TKO_Doctor_Stoppage),
+  sub_win_dif = (B_win_by_Submission - R_win_by_Submission), 
+  dec_dif = (B_win_by_Decision_Majority + B_win_by_Decision_Unanimous + B_win_by_Decision_Split) - (R_win_by_Decision_Majority + R_win_by_Decision_Unanimous + R_win_by_Decision_Split) 
+)
+
+# Engineering Variables - Accuracy differential for takedowns and strikes
+
+ufc = ufc %>% mutate(avg_str_pct = (B_avg_SIG_STR_pct - R_avg_SIG_STR_pct), avg_td_pct = (B_avg_TD_pct - R_avg_TD_pct))
+UFC_258 = UFC_258 %>% mutate(avg_str_pct = (B_avg_SIG_STR_pct - R_avg_SIG_STR_pct), avg_td_pct = (B_avg_TD_pct - R_avg_TD_pct))
+
+# Engineering Variables - Odds + Payouts Differentials 
+
+ufc = ufc %>% mutate(odds_dif = (B_odds - R_odds), ev_dif = (B_ev - R_ev))
+UFC_258 = UFC_258 %>% mutate(odds_dif = (B_odds - R_odds), ev_dif = (B_ev - R_ev))
+
+# Engineering Variables - Draw differentials 
+
+ufc = ufc %>% mutate(draw_dif = (B_draw - R_draw))
+UFC_258 = UFC_258 %>% mutate(draw_dif = (B_draw - R_draw))
+
+# Engineering Variables - Ranking differentials
+## An issue that does come up pertain to the women's featherweight class. This is largely due to the lack of depth in that weight class, so there really isn't any rankings here.  
+# Best solution is to identify previous/current chamption and list it as "0" and everyone else as "1". 
+
+ufc = ufc %>% 
+  mutate(
+    R_Women.s.Bantamweight_rank = ifelse(is.na(R_Women.s.Bantamweight_rank), 16, R_Women.s.Bantamweight_rank),
+    B_Women.s.Bantamweight_rank = ifelse(is.na(B_Women.s.Bantamweight_rank), 16, B_Women.s.Bantamweight_rank),
+    R_Women.s.Flyweight_rank = ifelse(is.na(R_Women.s.Flyweight_rank), 16, R_Women.s.Flyweight_rank),
+    B_Women.s.Flyweight_rank = ifelse(is.na(B_Women.s.Flyweight_rank), 16, B_Women.s.Flyweight_rank),
+    R_Women.s.Strawweight_rank = ifelse(is.na(R_Women.s.Strawweight_rank), 16, R_Women.s.Strawweight_rank),
+    B_Women.s.Strawweight_rank = ifelse(is.na(B_Women.s.Strawweight_rank), 16, B_Women.s.Strawweight_rank),
+    R_Flyweight_rank = ifelse(is.na(R_Flyweight_rank), 16, R_Flyweight_rank),
+    B_Flyweight_rank = ifelse(is.na(B_Flyweight_rank), 16, B_Flyweight_rank),
+    R_Bantamweight_rank = ifelse(is.na(R_Bantamweight_rank), 16, R_Bantamweight_rank),
+    B_Bantamweight_rank = ifelse(is.na(B_Bantamweight_rank), 16, B_Bantamweight_rank),
+    R_Featherweight_rank = ifelse(is.na(R_Featherweight_rank), 16, R_Featherweight_rank),
+    B_Featherweight_rank = ifelse(is.na(B_Featherweight_rank), 16, B_Featherweight_rank),
+    R_Lightweight_rank = ifelse(is.na(R_Lightweight_rank), 16, R_Lightweight_rank),
+    B_Lightweight_rank = ifelse(is.na(B_Lightweight_rank), 16, B_Lightweight_rank),
+    R_Welterweight_rank = ifelse(is.na(R_Welterweight_rank), 16, R_Welterweight_rank),
+    B_Welterweight_rank = ifelse(is.na(B_Welterweight_rank), 16, B_Welterweight_rank),
+    R_Middleweight_rank = ifelse(is.na(R_Middleweight_rank), 16, R_Middleweight_rank),
+    B_Middleweight_rank = ifelse(is.na(B_Middleweight_rank), 16, B_Middleweight_rank),
+    R_Light.Heavyweight_rank = ifelse(is.na(R_Light.Heavyweight_rank), 16, R_Light.Heavyweight_rank),
+    B_Light.Heavyweight_rank = ifelse(is.na(B_Light.Heavyweight_rank), 16, B_Light.Heavyweight_rank),
+    R_Heavyweight_rank = ifelse(is.na(R_Heavyweight_rank), 16, R_Heavyweight_rank),
+    B_Heavyweight_rank = ifelse(is.na(B_Heavyweight_rank), 16, B_Heavyweight_rank), 
+    R_match_weightclass_rank = ifelse(is.na(R_match_weightclass_rank), 16, R_match_weightclass_rank),
+    B_match_weightclass_rank = ifelse(is.na(B_match_weightclass_rank), 16, B_match_weightclass_rank)
+  ) %>% 
+  mutate(
+    rank_dif = ifelse(weight_class == "Heavyweight", B_Heavyweight_rank - R_Heavyweight_rank,
+               ifelse(weight_class == "Light Heavyweight", B_Light.Heavyweight_rank - R_Light.Heavyweight_rank,
+               ifelse(weight_class == "Middleweight", B_Middleweight_rank - R_Middleweight_rank,
+               ifelse(weight_class == "Welterweight", B_Welterweight_rank - R_Welterweight_rank,
+               ifelse(weight_class == "Lightweight", B_Lightweight_rank - R_Lightweight_rank,
+               ifelse(weight_class == "Featherweight", B_Featherweight_rank - R_Featherweight_rank,
+               ifelse(weight_class == "Bantamweight", B_Bantamweight_rank - R_Bantamweight_rank,
+               ifelse(weight_class == "Flyweight", B_Flyweight_rank - R_Flyweight_rank,
+               ifelse(weight_class == "Women's Bantamweight", B_Women.s.Bantamweight_rank - R_Women.s.Bantamweight_rank, 
+               ifelse(weight_class == "Women's Flyweight", B_Women.s.Flyweight_rank - R_Women.s.Flyweight_rank, 
+               ifelse(weight_class == "Women's Strawweight", B_Women.s.Strawweight_rank - R_Women.s.Strawweight_rank, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Amanda Nunes"), 1, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Cris Cyborg" & B_fighter != "Felicia Spencer"), 1, 0))))))))))))) 
+  )
+
+UFC_258 = UFC_258 %>% 
+  mutate(
+    R_Women.s.Bantamweight_rank = ifelse(is.na(R_Women.s.Bantamweight_rank), 16, R_Women.s.Bantamweight_rank),
+    B_Women.s.Bantamweight_rank = ifelse(is.na(B_Women.s.Bantamweight_rank), 16, B_Women.s.Bantamweight_rank),
+    R_Women.s.Flyweight_rank = ifelse(is.na(R_Women.s.Flyweight_rank), 16, R_Women.s.Flyweight_rank),
+    B_Women.s.Flyweight_rank = ifelse(is.na(B_Women.s.Flyweight_rank), 16, B_Women.s.Flyweight_rank),
+    R_Women.s.Strawweight_rank = ifelse(is.na(R_Women.s.Strawweight_rank), 16, R_Women.s.Strawweight_rank),
+    B_Women.s.Strawweight_rank = ifelse(is.na(B_Women.s.Strawweight_rank), 16, B_Women.s.Strawweight_rank),
+    R_Flyweight_rank = ifelse(is.na(R_Flyweight_rank), 16, R_Flyweight_rank),
+    B_Flyweight_rank = ifelse(is.na(B_Flyweight_rank), 16, B_Flyweight_rank),
+    R_Bantamweight_rank = ifelse(is.na(R_Bantamweight_rank), 16, R_Bantamweight_rank),
+    B_Bantamweight_rank = ifelse(is.na(B_Bantamweight_rank), 16, B_Bantamweight_rank),
+    R_Featherweight_rank = ifelse(is.na(R_Featherweight_rank), 16, R_Featherweight_rank),
+    B_Featherweight_rank = ifelse(is.na(B_Featherweight_rank), 16, B_Featherweight_rank),
+    R_Lightweight_rank = ifelse(is.na(R_Lightweight_rank), 16, R_Lightweight_rank),
+    B_Lightweight_rank = ifelse(is.na(B_Lightweight_rank), 16, B_Lightweight_rank),
+    R_Welterweight_rank = ifelse(is.na(R_Welterweight_rank), 16, R_Welterweight_rank),
+    B_Welterweight_rank = ifelse(is.na(B_Welterweight_rank), 16, B_Welterweight_rank),
+    R_Middleweight_rank = ifelse(is.na(R_Middleweight_rank), 16, R_Middleweight_rank),
+    B_Middleweight_rank = ifelse(is.na(B_Middleweight_rank), 16, B_Middleweight_rank),
+    R_Light.Heavyweight_rank = ifelse(is.na(R_Light.Heavyweight_rank), 16, R_Light.Heavyweight_rank),
+    B_Light.Heavyweight_rank = ifelse(is.na(B_Light.Heavyweight_rank), 16, B_Light.Heavyweight_rank),
+    R_Heavyweight_rank = ifelse(is.na(R_Heavyweight_rank), 16, R_Heavyweight_rank),
+    B_Heavyweight_rank = ifelse(is.na(B_Heavyweight_rank), 16, B_Heavyweight_rank), 
+    R_match_weightclass_rank = ifelse(is.na(R_match_weightclass_rank), 16, R_match_weightclass_rank),
+    B_match_weightclass_rank = ifelse(is.na(B_match_weightclass_rank), 16, B_match_weightclass_rank)
+  ) %>% 
+  mutate(
+    rank_dif = ifelse(weight_class == "Heavyweight", B_Heavyweight_rank - R_Heavyweight_rank,
+               ifelse(weight_class == "Light Heavyweight", B_Light.Heavyweight_rank - R_Light.Heavyweight_rank,
+               ifelse(weight_class == "Middleweight", B_Middleweight_rank - R_Middleweight_rank,
+               ifelse(weight_class == "Welterweight", B_Welterweight_rank - R_Welterweight_rank,
+               ifelse(weight_class == "Lightweight", B_Lightweight_rank - R_Lightweight_rank,
+               ifelse(weight_class == "Featherweight", B_Featherweight_rank - R_Featherweight_rank,
+               ifelse(weight_class == "Bantamweight", B_Bantamweight_rank - R_Bantamweight_rank,
+               ifelse(weight_class == "Flyweight", B_Flyweight_rank - R_Flyweight_rank,
+               ifelse(weight_class == "Women's Bantamweight", B_Women.s.Bantamweight_rank - R_Women.s.Bantamweight_rank, 
+               ifelse(weight_class == "Women's Flyweight", B_Women.s.Flyweight_rank - R_Women.s.Flyweight_rank, 
+               ifelse(weight_class == "Women's Strawweight", B_Women.s.Strawweight_rank - R_Women.s.Strawweight_rank, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Amanda Nunes"), 1, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Cris Cyborg" & B_fighter != "Felicia Spencer"), 1, 0))))))))))))) 
+  )
+
+# Engineering Variables - Is the event held in a different country? 
+
+ufc = ufc %>% mutate(is_foreign = ifelse(country == "USA", F, T))
+UFC_258 = UFC_258 %>% mutate(is_foreign = ifelse(country == "USA", F, T))
+
+# Engineering Variables - Stance Comparison
+
+ufc =  ufc %>% 
+  mutate(
+    stance_comparison = as.factor(ifelse(c(R_Stance == "Orthodox" & B_Stance == "Orthodox"), "Same",
+                        ifelse(c(R_Stance == "Southpaw" & B_Stance == "Southpaw"), "Same",
+                        ifelse(c(R_Stance == "Switch" & B_Stance == "Switch"), "Same",
+                        ifelse(c(R_Stance == "Open Stance" & B_Stance == "Open Stance"), "Same", "Opposite")))))
+    )
+
+UFC_258 =  UFC_258 %>% 
+  mutate(
+    stance_comparison = as.factor(ifelse(c(R_Stance == "Orthodox" & B_Stance == "Orthodox"), "Same",
+                        ifelse(c(R_Stance == "Southpaw" & B_Stance == "Southpaw"), "Same",
+                        ifelse(c(R_Stance == "Switch" & B_Stance == "Switch"), "Same",
+                        ifelse(c(R_Stance == "Open Stance" & B_Stance == "Open Stance"), "Same", "Opposite")))))
+    )
+    FC = ufc %>% select(
+  constant_1, Winner, finish, finish_details, total_fight_time_secs, R_fighter, B_fighter, R_match_weightclass_rank, B_match_weightclass_rank, better_rank, rank_dif, weight_class, gender, date, location, country, is_foreign, title_bout, empty_arena, R_odds, B_odds, odds_dif, R_ev, B_ev, ev_dif, R_wins, B_wins, win_dif, R_current_win_streak, B_current_win_streak, win_streak_dif, R_longest_win_streak, B_longest_win_streak, longest_win_streak_dif, R_draw, B_draw, draw_dif, R_losses, B_losses, loss_dif, R_current_lose_streak, B_current_lose_streak, lose_streak_dif, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, KO.TKO.Doctor_Stoppage_win_dif, R_win_by_Submission, B_win_by_Submission, sub_win_dif, R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, dec_dif, R_age, B_age, age_dif, R_Height_cms, B_Height_cms, height_dif, R_Reach_cms, B_Reach_cms, reach_dif, R_Stance, B_Stance, stance_comparison, R_avg_SIG_STR_landed, B_avg_SIG_STR_landed, sig_str_dif, R_avg_SIG_STR_pct, B_avg_SIG_STR_pct, avg_str_pct, R_avg_TD_landed, B_avg_TD_landed, avg_td_dif, R_avg_TD_pct, B_avg_TD_pct, avg_td_pct, R_avg_SUB_ATT, B_avg_SUB_ATT, avg_sub_att_dif, R_total_rounds_fought, B_total_rounds_fought, total_round_dif, R_total_title_bouts, B_total_title_bouts, total_title_bout_dif) %>% 
+  mutate(Winner = as.factor(Winner)) %>% 
+  mutate(Winner = relevel(Winner, ref = "Blue")) %>% 
+  na.omit() 
+
+# Re-organizing the data sets 
+
+UFC_258.copy = UFC_258
+
+UFC_258_clean = UFC_258.copy %>% 
+  select(Winner, finish, finish_details, total_fight_time_secs, R_fighter, B_fighter, R_match_weightclass_rank, B_match_weightclass_rank, better_rank, rank_dif, weight_class, gender, date, location, country, is_foreign, title_bout, empty_arena, R_odds, B_odds, odds_dif, R_ev, B_ev, ev_dif, R_wins, B_wins, win_dif, R_current_win_streak, B_current_win_streak, win_streak_dif, R_longest_win_streak, B_longest_win_streak, longest_win_streak_dif, R_draw, B_draw, draw_dif, R_losses, B_losses, loss_dif, R_current_lose_streak, B_current_lose_streak, lose_streak_dif, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, KO.TKO.Doctor_Stoppage_win_dif, R_win_by_Submission, B_win_by_Submission, sub_win_dif, R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, dec_dif, R_age, B_age, age_dif, R_Height_cms, B_Height_cms, height_dif, R_Reach_cms, B_Reach_cms, reach_dif, R_Stance, B_Stance, stance_comparison, R_avg_SIG_STR_landed, B_avg_SIG_STR_landed, sig_str_dif, R_avg_SIG_STR_pct, B_avg_SIG_STR_pct, avg_str_pct, R_avg_TD_landed, B_avg_TD_landed, avg_td_dif, R_avg_TD_pct, B_avg_TD_pct, avg_td_pct, R_avg_SUB_ATT, B_avg_SUB_ATT, avg_sub_att_dif, R_total_rounds_fought, B_total_rounds_fought, total_round_dif, R_total_title_bouts, B_total_title_bouts, total_title_bout_dif)  
+
+UFC_258_clean
