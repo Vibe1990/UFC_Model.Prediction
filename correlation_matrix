@@ -1,0 +1,87 @@
+# Setting up the correlation matrix to be used for analysis
+
+# Making a data set for correlation matrix 
+
+UFC.correlation_pt.1 = UFC %>% 
+  mutate(
+    Winner = as.numeric(ifelse(Winner == "Red", 1, 0)),
+    punch_elbow_slam = as.numeric(ifelse(finish_details == "Punch/Elbow/Slam", 1, 0)), 
+    kick_knee = as.numeric(ifelse(finish_details == "Kick/Knee", 1, 0)), 
+    decision = as.numeric(ifelse(finish_details == "Decision", 1, 0)), 
+    choke = as.numeric(ifelse(finish_details == "Choke", 1, 0)), 
+    lowerbody_lock = as.numeric(ifelse(finish_details == "Lowerbody Joint Lock", 1, 0)), 
+    upperbody_lock = as.numeric(ifelse(finish_details == "Upperbody Joint Lock", 1, 0)), 
+    blue_better_rank = as.numeric(ifelse(better_rank == "Blue", 1, 0)),
+    red_better_rank = as.numeric(ifelse(better_rank == "Red", 1, 0)),
+    gender = as.numeric(ifelse(gender == "MALE", 0, 1)), 
+    heavyweight = as.numeric(ifelse(weight_class == "Heavyweight", 1, 0)), 
+    light_heavyweight = as.numeric(ifelse(weight_class == "Light Heavyweight", 1, 0)), 
+    middleweight = as.numeric(ifelse(weight_class == "Middleweight", 1, 0)),
+    welterweight = as.numeric(ifelse(weight_class == "Welterweight", 1, 0)),
+    lightweight = as.numeric(ifelse(weight_class == "Lightweight", 1, 0)),
+    featherweight = as.numeric(ifelse(weight_class == "Featherweight", 1, 0)),
+    bantamweight = as.numeric(ifelse(weight_class == "Bantamweight", 1, 0)),
+    flyweight = as.numeric(ifelse(weight_class == "Flyweight", 1, 0)),
+    women_featherweight = as.numeric(ifelse(weight_class == "Women's Featherweight", 1, 0)),
+    women_bantamweight = as.numeric(ifelse(weight_class == "Women's Bantamweight", 1, 0)),
+    women_flyweight = as.numeric(ifelse(weight_class == "Women's Flyweight", 1, 0)),
+    women_strawweight = as.numeric(ifelse(weight_class == "Women's Strawweight", 1, 0)),
+    is_foreign = as.numeric(ifelse(is_foreign == TRUE, 1, 0)), 
+    title_bout = as.numeric(ifelse(title_bout == TRUE, 1, 0)), 
+    opposite_stance = as.numeric(ifelse(stance_comparison == "Opposite", 1, 0))
+  )
+
+UFC.correlation_pt.2 = UFC.correlation_pt.1 %>% 
+  select(
+    -R_fighter, -B_fighter, -date, -finish, -finish_details, -better_rank, -weight_class, -location, -country, -R_Stance, -B_Stance, -stance_comparison, -constant_1
+  )
+
+UFC.correlation = UFC.correlation_pt.2 %>% 
+  select(
+    Winner, punch_elbow_slam, kick_knee, choke, upperbody_lock, lowerbody_lock, decision, total_fight_time_secs, B_match_weightclass_rank, R_match_weightclass_rank, blue_better_rank,
+    red_better_rank, heavyweight, light_heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, 
+    women_flyweight, women_strawweight, title_bout, is_foreign, empty_arena, B_ev, R_ev, ev_dif, B_wins, R_wins, win_dif, B_current_win_streak,
+    R_current_win_streak, win_streak_dif, B_longest_win_streak, R_longest_win_streak, longest_win_streak_dif, B_draw, R_draw, draw_dif, B_losses, R_losses, loss_dif, 
+    B_current_lose_streak, R_current_lose_streak, lose_streak_dif, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, 
+    KO.TKO.Doctor_Stoppage_win_dif, B_win_by_Submission, R_win_by_Submission, sub_win_dif, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, 
+    R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, dec_dif, B_age, R_age, age_dif, B_Height_cms, R_Height_cms, height_dif, B_Reach_cms, 
+    R_Reach_cms, reach_dif, gender, opposite_stance, B_total_rounds_fought, R_total_rounds_fought, total_round_dif, B_total_title_bouts, R_total_title_bouts, total_title_bout_dif, 
+    B_avg_SIG_STR_landed, R_avg_SIG_STR_landed, sig_str_dif, B_avg_SIG_STR_pct, R_avg_SIG_STR_pct, avg_str_pct, B_avg_TD_landed, R_avg_TD_landed, avg_td_dif, B_avg_TD_pct, 
+    R_avg_TD_pct, avg_td_pct, B_avg_SUB_ATT, R_avg_SUB_ATT, avg_sub_att_dif
+  )
+
+# Plotting the correlation matrix 
+
+corr_UFC = cor(UFC.correlation)
+
+ggcorrplot(corr_UFC, method = "square", type = "upper", sig.level = 0.2, insig = "blank", p.mat = cor_pmat(corr_UFC)) + 
+  theme_classic() +
+  theme(
+    panel.background = element_rect(fill = "white"), 
+    axis.text = element_text(color = "black"), 
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+# Making a differential only data set 
+
+UFC.correlation_dif.only = UFC.correlation %>% 
+  select(
+    Winner, punch_elbow_slam, kick_knee, choke, upperbody_lock, lowerbody_lock, decision, total_fight_time_secs, blue_better_rank,
+    red_better_rank, heavyweight, light_heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, 
+    women_flyweight, women_strawweight, title_bout, is_foreign, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, 
+    KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, gender, opposite_stance, total_round_dif, total_title_bout_dif, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct,
+    avg_sub_att_dif
+  )
+
+
+# Plotting the correlation matrix using the differential only data set
+
+corr_UFC.dif_only = cor(UFC.correlation_dif.only)
+
+ggcorrplot(corr_UFC.dif_only, method = 'square', type = 'upper', sig.level = 0.2, insig = 'blank', p.mat = cor_pmat(corr_UFC.dif_only), lab = T) + 
+  theme_classic() + 
+  theme(
+    axis.text = element_text(color = 'black'),
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  )
