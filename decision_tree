@@ -1,0 +1,105 @@
+
+training_dif.only = training_set %>% 
+  select(Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+  
+testing_dif.only = testing_set %>% 
+  select(
+    Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+  ) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+
+
+library(rpart)
+
+# Create a basic model to use as a reference point
+
+set.seed(1234)
+decision.tree.basic = rpart(Winner ~., data = training_dif.only, method = "class", parms = list(split = "gini"))
+decision.tree.basic$variable.importance[1:10]
+decision.tree.basic$control # minsplit = 20, minbucket = 7, cp = 0.01, maxcompete =4, maxsurrogate = 5, usesurrogate = 2, maxdepth = 30, 
+decision.tree.basic$cptable
+
+accuracy_decision.tree.basic  = round(mean(predict(rpart(Winner ~., data = training_dif.only, method = "class", parms = list(split = "gini"), control = rpart.control(cp = 0.01, minsplit = 20, minbucket = 7, maxcompete = 4, maxsurrogate = 5, usesurrogate = 2, surrogatestyle = 0, maxdepth = 30)), testing_dif.only, type = 'class') == testing_dif.only$Winner)*100, 3)
+
+accuracy_decision.tree.basic
+
+
+# Create search grid to find optimal hyperparameters for tuning model. 
+
+rpart_control = expand.grid(
+  minsplit = seq(10, 40, 5), 
+  minbucket = seq(3, 10, 1),
+  cp = c(0.001, 0.003, 0.005, 0.01, 0.03, 0.05, 0.1),
+  maxdepth = 30, 
+  xerror = 0
+)
+
+# Run a for-loop to get optimzed model.  Store cross-validation errors in search grid for reference to best parameters to use 
+
+for (i in 1:nrow(rpart_control)) {
+  set.seed(1234)
+  
+  model = rpart(Winner ~., 
+                data = training_dif.only, 
+                method = "class", 
+                parms = list(split = "gini"),
+                control = rpart.control(minsplit = rpart_control$minsplit[i],
+                                        minbucket = rpart_control$minbucket[i],
+                                        maxdepth = rpart_control$maxdepth[i], 
+                                        cp = rpart_control$cp[i]))
+  
+  rpart_control$xerror[i] = min(model$cptable[, 4]) 
+}
+
+# Since there were two, just compare the two
+
+set.seed(1234)
+
+rpart_control.a = rpart.control(minsplit = 35, minbucket = 9, maxdepth = 30, cp = 0.001)
+rpart_control.b = rpart.control(minsplit = 35, minbucket = 9, maxdepth = 30, cp = 0.003)
+
+
+decision.tree.tune.a = rpart(Winner ~., 
+                             data = training_dif.only, 
+                             method = "class", 
+                             parms = list(split = "gini"), 
+                             control = rpart_control.a)
+
+decision.tree.tune.b = rpart(Winner ~., 
+                             data = training_dif.only, 
+                             method = "class", 
+                             parms = list(split = "gini"), 
+                             control = rpart_control.b)
+
+
+
+decision.tree.tune.a$cptable # best cp is 0.004290876; xerror = 0.8726287 # best option
+decision.tree.tune.b$cptable
+
+View(rpart_control)
+
+set.seed(1234)
+rpart_control.tuned = rpart.control(minsplit = 35, minbucket = 9, maxdepth = 30, cp = 0.004290876)
+decision.tree.tuned = rpart(Winner ~., 
+                             data = training_dif.only, 
+                             method = "class", 
+                             parms = list(split = "gini"), 
+                             control = rpart_control.tuned
+                             )
+decision.tree.tuned$cptable
+rpart.plot(decision.tree.tuned)
+
+accuracy_decision.tree.tuned = round(mean(predict(decision.tree.tuned, testing_dif.only, type = "class") == testing_dif.only$Winner)*100, 3)
+
+accuracy_decision.tree.tuned
