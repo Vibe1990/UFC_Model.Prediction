@@ -1,0 +1,23 @@
+# Code to determine baseline predictions 
+
+# STEP 1: Make a variable that works on the underlying assumption that a negative value = betting favourite and thus will be the analyst pick 
+
+UFC = UFC %>% 
+  mutate(
+  analyst_pick = as.factor(ifelse(R_odds > 0, "underdog", ifelse(R_odds < 0, "favorite", NA)))) %>% 
+  mutate(
+  analyst_pick = relevel(analyst_pick, ref = "underdog")  
+  )
+  
+set.seed(1234) # Allow for replicability 
+
+library(caret) 
+
+indexing = createDataPartition(UFC$Winner, p = 0.75, list = F)
+
+training_set = UFC[indexing, ]
+testing_set = UFC[-indexing, ]
+
+table_baseline = table(testing_set$Winner, testing_set$analyst_pick)
+accuracy_baseline = sum(diag(table_baseline))/sum(table_baseline)
+accuracy_baseline = round(accuracy_baseline * 100, 3)
