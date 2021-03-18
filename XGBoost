@@ -1,0 +1,268 @@
+# Creating a partition to use to split data set
+library(caret)
+
+set.seed(1234)
+
+indexing = createDataPartition(UFC$Winner, p = 0.75, list = F)
+
+training_set = UFC[indexing, ]
+testing_set = UFC[-indexing, ]
+
+# Creating the necessary data set that includes only differential variables 
+
+training_dif.only = training_set %>% 
+  select(Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+  
+testing_dif.only = testing_set %>% 
+  select(
+    Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+  ) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+ 
+# Load the necessary library for extreme gradient boost modelling 
+
+library(XGBoost)
+
+# Pre-process the data by one-hot encoding this 
+
+training_for_xgboost = training_dif.only
+testing_for_xgboost = testing_dif.only
+
+training_for_xgboost = training_for_xgboost %>% 
+  mutate(
+    punch_elbow_slam = ifelse(finish_details == "Punch/Elbow/Slam", 1, 0),
+    kick_knee = ifelse(finish_details == "Kick/Knee", 1, 0), 
+    choke = ifelse(finish_details == "Choke", 1, 0), 
+    decision = ifelse(finish_details == "Decision", 1, 0),
+    lowerbody = ifelse(finish_details == "Lowerbody Joint Lock", 1, 0), 
+    upperbody = ifelse(finish_details == "Upperbody Joint Lock", 1, 0), 
+    heavyweight = ifelse(weight_class == "Heavyweight", 1, 0),
+    light.heavyweight = ifelse(weight_class == "Light Heavyweight", 1, 0), 
+    middleweight = ifelse(weight_class == "Middleweight", 1, 0), 
+    welterweight = ifelse(weight_class == "Welterweight", 1, 0), 
+    lightweight = ifelse(weight_class == "Lightweight", 1, 0), 
+    featherweight = ifelse(weight_class == "Featherweight", 1, 0), 
+    bantamweight = ifelse(weight_class == "Bantamweight", 1, 0), 
+    flyweight = ifelse(weight_class == "Flyweight", 1, 0), 
+    women_featherweight = ifelse(weight_class == "Women's Featherweight", 1, 0), 
+    women_bantamweight = ifelse(weight_class == "Women's Bantamweight", 1, 0), 
+    women_flyweight = ifelse(weight_class == "Women's Flyweight", 1, 0), 
+    women_strawweight = ifelse(weight_class == "Women's Strawweight", 1, 0), 
+    gender = ifelse(gender == "MALE", 1, 0), 
+    is_foreign = ifelse(is_foreign == TRUE, 1, 0), 
+    title_bout = ifelse(title_bout == TRUE, 1, 0), 
+    stance_comparison = ifelse(stance_comparison == "Same", 0, 1)
+  ) %>% 
+  mutate(
+    is_foreign = as.numeric(ifelse(is_foreign == TRUE, 1, 0)),
+    title_bout = as.numeric(ifelse(title_bout == TRUE, 1, 0))
+  )
+
+testing_for_xgboost = testing_for_xgboost %>% 
+  mutate(
+    punch_elbow_slam = ifelse(finish_details == "Punch/Elbow/Slam", 1, 0),
+    kick_knee = ifelse(finish_details == "Kick/Knee", 1, 0), 
+    choke = ifelse(finish_details == "Choke", 1, 0), 
+    decision = ifelse(finish_details == "Decision", 1, 0),
+    lowerbody = ifelse(finish_details == "Lowerbody Joint Lock", 1, 0), 
+    upperbody = ifelse(finish_details == "Upperbody Joint Lock", 1, 0), 
+    heavyweight = ifelse(weight_class == "Heavyweight", 1, 0),
+    light.heavyweight = ifelse(weight_class == "Light Heavyweight", 1, 0), 
+    middleweight = ifelse(weight_class == "Middleweight", 1, 0), 
+    welterweight = ifelse(weight_class == "Welterweight", 1, 0), 
+    lightweight = ifelse(weight_class == "Lightweight", 1, 0), 
+    featherweight = ifelse(weight_class == "Featherweight", 1, 0), 
+    bantamweight = ifelse(weight_class == "Bantamweight", 1, 0), 
+    flyweight = ifelse(weight_class == "Flyweight", 1, 0), 
+    women_featherweight = ifelse(weight_class == "Women's Featherweight", 1, 0), 
+    women_bantamweight = ifelse(weight_class == "Women's Bantamweight", 1, 0), 
+    women_flyweight = ifelse(weight_class == "Women's Flyweight", 1, 0), 
+    women_strawweight = ifelse(weight_class == "Women's Strawweight", 1, 0), 
+    gender = ifelse(gender == "MALE", 1, 0), 
+    is_foreign = ifelse(is_foreign == TRUE, 1, 0), 
+    title_bout = ifelse(title_bout == TRUE, 1, 0), 
+    stance_comparison = ifelse(stance_comparison == "Same", 0, 1)
+  ) %>% 
+  mutate(
+    is_foreign = as.numeric(ifelse(is_foreign == TRUE, 1, 0)),
+    title_bout = as.numeric(ifelse(title_bout == TRUE, 1, 0))
+  )
+
+training_for_xgboost = training_for_xgboost %>% 
+  dplyr::select(
+    Winner, punch_elbow_slam, kick_knee, choke, lowerbody, upperbody, decision, total_fight_time_secs, heavyweight, light.heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, women_flyweight, women_strawweight, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+    )
+
+testing_for_xgboost = testing_for_xgboost %>% 
+  dplyr::select(
+    Winner, punch_elbow_slam, kick_knee, choke, lowerbody, upperbody, decision, total_fight_time_secs, heavyweight, light.heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, women_flyweight, women_strawweight, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+    )
+
+# Format the training data and testing data used in modelling into a matrix as well as labelling the target variable 
+
+xgb_training = as.matrix(training_for_xgboost %>% dplyr::select(- Winner))
+xgb_testing = as.matrix(testing_for_xgboost %>% dplyr::select(- Winner))
+
+training_label = training_for_xgboost$Winner
+testing_label = testing_for_xgboost$Winner
+
+# Create a basic reference model using default parameter settings. 
+
+xgb_trcontrol = trainControl(
+  method = "repeatedcv", 
+  number = 3,
+  repeats = 5,
+  allowParallel = T, 
+  classProbs = T,
+  summaryFunction = twoClassSummary
+)
+
+xgb.grid.basic = expand.grid(
+  eta = 0.1, 
+  gamma = 0, 
+  max_depth = 6, 
+  min_child_weight = 1, 
+  subsample = 1, 
+  colsample_bytree = 1,
+  nrounds = 500
+)
+
+set.seed(1234)
+
+xgb_model.basic = caret::train(x = xgb_training, 
+                        y = training_label,
+                        trControl = xgb_trcontrol, 
+                        method = "xgbTree",
+                        metric = "ROC",
+                        tuneGrid = xgb.grid.basic
+                        )
+
+pred_xgb.basic = predict(xgb_model.basic, xgb_testing)
+accuracy_xgboost.basic = round(mean(pred_xgb.basic == testing_label)*100, 3)
+accuracy_xgboost.basic
+
+# Perform a multi-stage grid search identifying best parameters
+
+xgb.grid.1 = expand.grid(
+  eta = c(0.001, 0.005, 0.01, 0.05, 0.1, 0.3, 0.5, 1),
+  gamma = 0, 
+  max_depth = 6, 
+  min_child_weight = 1, 
+  subsample = 1, 
+  colsample_bytree = 1,
+  nrounds = 500
+)
+
+set.seed(1234)
+xgb_model.A = caret::train(x = xgb_training, 
+                        y = training_label,
+                        trControl = xgb_trcontrol, 
+                        method = "xgbTree",
+                        metric = "ROC",
+                        tuneGrid = xgb.grid.1
+                        )
+
+xgb_model.A$bestTune # ETA = 0.005 had the best result, so keep this
+
+pred_xgboost.A = predict(xgb_model.A, xgb_testing)
+accuracy_xgb.A = round(mean(pred_xgboost.A == testing_label)*100, 3)
+accuracy_xgb.A
+
+
+xgb.grid.2 = expand.grid(
+  eta = 0.005,
+  gamma = 0, 
+  max_depth = c(1,3,6,8,10), 
+  min_child_weight = seq(1, 10, 1),
+  subsample = seq(0.5, 1, 0.1), 
+  colsample_bytree = 1,
+  nrounds = 500
+)
+
+set.seed(1234)
+
+xgb_model.B = caret::train(xgb_training, 
+                    training_label,
+                        trControl = xgb_trcontrol, 
+                        method = "xgbTree",
+                        metric = "ROC",
+                        tuneGrid = xgb.grid.2
+                      )
+xgb_model.B$results %>% arrange(desc(xgb_model.B$results$ROC)) # Select the best few options for testing for the last parameter
+
+# Here are some of the best options we got
+
+xgb.grid.3a = expand.grid(eta = 0.005,gamma = 0, max_depth = 1, min_child_weight = 3,subsample = 0.8, colsample_bytree = seq(0.4, 0.9, 0.1), nrounds = 500)
+xgb.grid.3b = expand.grid(eta = 0.005,gamma = 0, max_depth = 1, min_child_weight = 6,subsample = 0.6, colsample_bytree = seq(0.4, 0.9, 0.1),nrounds = 500)
+xgb.grid.3c = expand.grid(eta = 0.005,gamma = 0, max_depth = 1, min_child_weight = 8,subsample = 0.7, colsample_bytree = seq(0.4, 0.9, 0.1),nrounds = 500)
+xgb.grid.3d = expand.grid(eta = 0.005,gamma = 0, max_depth = 3, min_child_weight = 4,subsample = 0.5, colsample_bytree = seq(0.4, 0.9, 0.1),nrounds = 500)
+xgb.grid.3e = expand.grid(eta = 0.005,gamma = 0, max_depth = 1, min_child_weight = 1,subsample = 0.8, colsample_bytree = seq(0.4, 0.9, 0.1),nrounds = 500)
+xgb.grid.3f = expand.grid(eta = 0.005,gamma = 0, max_depth = 1, min_child_weight = 4,subsample = 0.8, colsample_bytree = seq(0.4, 0.9, 0.1),nrounds = 500)
+xgb.grid.3g = expand.grid(eta = 0.005,gamma = 0, max_depth = 3, min_child_weight = 3,subsample = 0.6, colsample_bytree = seq(0.4, 0.9, 0.1),nrounds = 500)
+
+
+set.seed(1234)
+xgb_model.3a = caret::train(xgb_training, training_label, trControl = xgb_trcontrol,method = "xgbTree", metric = "ROC", tuneGrid = xgb.grid.3a)
+xgb_model.3a$bestTune # colsample = 0.9
+
+set.seed(1234)
+xgb_model.3b = caret::train(xgb_training, training_label, trControl = xgb_trcontrol, method = "xgbTree", metric = "ROC", tuneGrid = xgb.grid.3b)
+xgb_model.3b$bestTune # 0.9
+
+set.seed(1234)
+xgb_model.3c = caret::train(xgb_training, training_label, trControl = xgb_trcontrol, method = "xgbTree", metric = "ROC", tuneGrid = xgb.grid.3c)
+xgb_model.3c$bestTune # colsample = 0.9
+
+set.seed(1234)
+xgb_model.3d = caret::train(xgb_training, training_label,trControl = xgb_trcontrol, method = "xgbTree",metric = "ROC",tuneGrid = xgb.grid.3d)
+xgb_model.3d$bestTune # colsample = 0.7
+
+set.seed(1234)
+xgb_model.3e = caret::train(xgb_training, training_label,trControl = xgb_trcontrol, method = "xgbTree",metric = "ROC",tuneGrid = xgb.grid.3e)
+xgb_model.3e$bestTune # colsample = 0.9
+
+set.seed(1234)
+xgb_model.3f = caret::train(xgb_training, training_label,trControl = xgb_trcontrol, method = "xgbTree",metric = "ROC",tuneGrid = xgb.grid.3f)
+xgb_model.3f$bestTune # colsample = 0.9
+
+set.seed(1234)
+xgb_model.3g = caret::train(xgb_training, training_label,trControl = xgb_trcontrol, method = "xgbTree",metric = "ROC",tuneGrid = xgb.grid.3g)
+xgb_model.3g$bestTune # colsample = 0.5
+
+pred_xgboost_3a = predict(xgb_model.3a, xgb_testing)
+pred_xgboost_3b = predict(xgb_model.3b, xgb_testing)
+pred_xgboost_3c = predict(xgb_model.3c, xgb_testing)
+pred_xgboost_3d = predict(xgb_model.3d, xgb_testing)
+pred_xgboost_3e = predict(xgb_model.3e, xgb_testing)
+pred_xgboost_3f = predict(xgb_model.3f, xgb_testing)
+pred_xgboost_3g = predict(xgb_model.3g, xgb_testing)
+
+
+accuracy_xgb.3A = round(mean(pred_xgboost_3a == testing_label)*100, 3)
+accuracy_xgb.3B = round(mean(pred_xgboost_3b == testing_label)*100, 3)
+accuracy_xgb.3C = round(mean(pred_xgboost_3c == testing_label)*100, 3) 
+accuracy_xgb.3D = round(mean(pred_xgboost_3d == testing_label)*100, 3)
+accuracy_xgb.3E = round(mean(pred_xgboost_3e == testing_label)*100, 3)
+accuracy_xgb.3F = round(mean(pred_xgboost_3f == testing_label)*100, 3)
+accuracy_xgb.3G = round(mean(pred_xgboost_3g == testing_label)*100, 3)
+
+
+# After evaluating, it turns out the model 3C was the best option. 
+
+set.seed(1234)
+xgb.grid.best = expand.grid(eta = 0.005, gamma = 0, max_depth = 1, min_child_weight = 8,subsample = 0.7, colsample_bytree = 0.9 ,nrounds = 500)
+xgb_model.best = caret::train(xgb_training, training_label, trControl = xgb_trcontrol, method = "xgbTree", metric = "ROC", tuneGrid = xgb.grid.best)
+pred_xgboost_tuned = predict(xgb_model.best, xgb_testing)
+accuracy_xgb.tuned = round(mean(pred_xgboost_tuned == testing_label)*100, 3)
+accuracy_xgb.tuned
