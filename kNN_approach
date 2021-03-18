@@ -1,4 +1,12 @@
-# Create a data set 
+# Creating a partition to use to split data set
+set.seed(1234)
+
+indexing = createDataPartition(UFC$Winner, p = 0.75, list = F)
+
+training_set = UFC[indexing, ]
+testing_set = UFC[-indexing, ]
+
+# Creating the necessary data set that includes only differential variables 
 
 training_dif.only = training_set %>% 
   select(Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif) %>% 
@@ -19,7 +27,7 @@ testing_dif.only = testing_set %>%
     gender = relevel(gender, ref = "MALE"),
     stance_comparison = relevel(stance_comparison, ref = "Same")
   )
-
+  
 # Next create a normalize function to allow for numeric variable scaling 
 
 normalize = function(x) {
