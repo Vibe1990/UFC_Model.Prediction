@@ -1,0 +1,30 @@
+# With the different models available, let's try to evaluate the different models 
+
+recap_accuracy =  rbind("Baseline Accuracy" = accuracy_baseline,
+                          "k-NN Modelling" = accuracy_KNN_opt, 
+                          "Logistic Regression - All Relevant Variables" = accuracy_log_reg.all,
+                          "Logistic Regression - Stepwise Regression Selection" = accuracy_log_reg.step,
+                          "Logistic Regression - Correlates Only" = accuracy_log_reg.cor, 
+                          "Logistic Regression - Significant Differences Only" =  accuracy_log_reg.association, 
+                          "Decision Tree" = accuracy_decision.tree.tuned, 
+                          "Random Forest" = accuracy_rf, 
+                          "Extreme Gradient Boost" = accuracy_xgb.tuned
+                         )
+                 
+recap_accuracy %>% arrange(desc(V1)) 
+
+# Best option ended up being either (i) logistic regression - correlates or (ii) logistic regression - significant differences only 
+
+# Make a prediction using the "upcoming fight" data set
+
+predict_UFC.258.regression.cor = ifelse(predict(log_reg.cor, UFC_258_clean, type = "response") > 0.5, "Red", "Blue") 
+predict_UFC.258.regression.cor # Turns out it's Red, Blue, Red, Red, Blue, Red, Red, Red, Red, Red 
+
+# Using the proposed method that an analyst would have used to predict fight outcomes: 
+
+UFC_258_clean %>% 
+  select (B_fighter, R_fighter, B_odds, R_odds) %>% 
+  mutate(analyst_pick = as.factor(ifelse(R_odds > 0, "underdog", ifelse(R_odds < 0, "favorite", NA)))) %>% 
+  mutate(analyst_pick = relevel(analyst_pick, ref = "underdog"))
+  
+# Through a comparative look, you'll find that model prediction outperformed proposed analyst pick by 1 match-ups.   
