@@ -1,0 +1,275 @@
+# Training + Testing Data Set
+
+training_dif.only = training_set %>% 
+  select(Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+  
+testing_dif.only = testing_set %>% 
+  select(
+    Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+  ) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+  
+# There are 4 proposed approaches with the use of logistic regression. 
+
+# Option 1: Using all relevant variables - which will include eliminating all variables that would have been agreed upon during contract negotiations. 
+
+log_reg.all = glm(Winner ~ finish_details + total_fight_time_secs + rank_dif + title_bout + ev_dif + win_dif + win_streak_dif + longest_win_streak_dif + draw_dif + loss_dif + lose_streak_dif + KO.TKO.Doctor_Stoppage_win_dif + sub_win_dif + dec_dif + age_dif + height_dif + reach_dif + stance_comparison + sig_str_dif + avg_str_pct + avg_td_dif + avg_td_pct + avg_sub_att_dif + total_round_dif + total_title_bout_dif, data = training_dif.only, family = binomial(link = "logit"))
+
+summary(log_reg.all)
+AIC(log_reg.all)
+
+pred_log_reg.all = predict(log_reg.all, testing_dif.only, type = "response") 
+pred_log_reg.all = ifelse(pred_log_reg.all > 0.5, "Red", "Blue") # here we see that any value > 0.5 = red (aka. 1) vs. < 0.5 = blue (aka. 0)
+table(pred_log_reg.all, testing_dif.only$Winner)
+accuracy_log_reg.all = round(mean(pred_log_reg.all == testing_dif.only$Winner) * 100, 3)
+accuracy_log_reg.all
+
+
+# Option 2: Using a bi-directional stepwise regression 
+
+set.seed(1234)
+
+start_model = glm(Winner ~ 1, data = training_dif.only, family = binomial(link = "logit"))
+all_model = glm(Winner ~ ., data = training_dif.only, family = binomial(link = "logit"))
+
+MASS::stepAIC(start_model, direction = 'both', scope = formula(all_model)) 
+
+# See next line for all variables that were retained. 
+
+log_reg.step = glm(Winner ~ ev_dif + age_dif + avg_td_dif + finish_details + avg_td_pct + is_foreign + total_fight_time_secs + draw_dif, family = binomial(link = "logit"), data = training_dif.only)
+
+summary(log_reg.step)
+AIC(log_reg.step)
+
+pred_log_reg.step = ifelse(predict(log_reg.step, testing_dif.only, type = "response") > 0.5, "Red", "Blue")
+table(pred_log_reg.step, testing_dif.only$Winner)
+accuracy_log_reg.step = round(mean(pred_log_reg.step == testing_dif.only$Winner)*100, 3)
+accuracy_log_reg.step
+
+
+# Option 3: Using only variables that were found to have a significant correlation with Winner outcomes 
+
+library(ggcorrplot)
+
+# Using the correlation matrix created earlier to find variables ....
+
+UFC.correlation_pt.1 = UFC %>% 
+  mutate(
+    Winner = as.numeric(ifelse(Winner == "Red", 1, 0)),
+    punch_elbow_slam = as.numeric(ifelse(finish_details == "Punch/Elbow/Slam", 1, 0)), 
+    kick_knee = as.numeric(ifelse(finish_details == "Kick/Knee", 1, 0)), 
+    decision = as.numeric(ifelse(finish_details == "Decision", 1, 0)), 
+    choke = as.numeric(ifelse(finish_details == "Choke", 1, 0)), 
+    lowerbody_lock = as.numeric(ifelse(finish_details == "Lowerbody Joint Lock", 1, 0)), 
+    upperbody_lock = as.numeric(ifelse(finish_details == "Upperbody Joint Lock", 1, 0)), 
+    blue_better_rank = as.numeric(ifelse(better_rank == "Blue", 1, 0)),
+    red_better_rank = as.numeric(ifelse(better_rank == "Red", 1, 0)),
+    gender = as.numeric(ifelse(gender == "MALE", 0, 1)), 
+    heavyweight = as.numeric(ifelse(weight_class == "Heavyweight", 1, 0)), 
+    light_heavyweight = as.numeric(ifelse(weight_class == "Light Heavyweight", 1, 0)), 
+    middleweight = as.numeric(ifelse(weight_class == "Middleweight", 1, 0)),
+    welterweight = as.numeric(ifelse(weight_class == "Welterweight", 1, 0)),
+    lightweight = as.numeric(ifelse(weight_class == "Lightweight", 1, 0)),
+    featherweight = as.numeric(ifelse(weight_class == "Featherweight", 1, 0)),
+    bantamweight = as.numeric(ifelse(weight_class == "Bantamweight", 1, 0)),
+    flyweight = as.numeric(ifelse(weight_class == "Flyweight", 1, 0)),
+    women_featherweight = as.numeric(ifelse(weight_class == "Women's Featherweight", 1, 0)),
+    women_bantamweight = as.numeric(ifelse(weight_class == "Women's Bantamweight", 1, 0)),
+    women_flyweight = as.numeric(ifelse(weight_class == "Women's Flyweight", 1, 0)),
+    women_strawweight = as.numeric(ifelse(weight_class == "Women's Strawweight", 1, 0)),
+    is_foreign = as.numeric(ifelse(is_foreign == TRUE, 1, 0)), 
+    title_bout = as.numeric(ifelse(title_bout == TRUE, 1, 0)), 
+    opposite_stance = as.numeric(ifelse(stance_comparison == "Opposite", 1, 0))
+  )
+
+UFC.correlation_pt.2 = UFC.correlation_pt.1 %>% 
+  select(
+    -R_fighter, -B_fighter, -date, -finish, -finish_details, -better_rank, -weight_class, -location, -country, -R_Stance, -B_Stance, -stance_comparison, -constant_1
+  )
+
+
+UFC.correlation = UFC.correlation_pt.2 %>% 
+  select(
+    Winner, punch_elbow_slam, kick_knee, choke, upperbody_lock, lowerbody_lock, decision, total_fight_time_secs, B_match_weightclass_rank, R_match_weightclass_rank, blue_better_rank,
+    red_better_rank, heavyweight, light_heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, 
+    women_flyweight, women_strawweight, title_bout, is_foreign, empty_arena, B_ev, R_ev, ev_dif, B_wins, R_wins, win_dif, B_current_win_streak,
+    R_current_win_streak, win_streak_dif, B_longest_win_streak, R_longest_win_streak, longest_win_streak_dif, B_draw, R_draw, draw_dif, B_losses, R_losses, loss_dif, 
+    B_current_lose_streak, R_current_lose_streak, lose_streak_dif, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, 
+    KO.TKO.Doctor_Stoppage_win_dif, B_win_by_Submission, R_win_by_Submission, sub_win_dif, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, 
+    R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, dec_dif, B_age, R_age, age_dif, B_Height_cms, R_Height_cms, height_dif, B_Reach_cms, 
+    R_Reach_cms, reach_dif, gender, opposite_stance, B_total_rounds_fought, R_total_rounds_fought, total_round_dif, B_total_title_bouts, R_total_title_bouts, total_title_bout_dif, 
+    B_avg_SIG_STR_landed, R_avg_SIG_STR_landed, sig_str_dif, B_avg_SIG_STR_pct, R_avg_SIG_STR_pct, avg_str_pct, B_avg_TD_landed, R_avg_TD_landed, avg_td_dif, B_avg_TD_pct, 
+    R_avg_TD_pct, avg_td_pct, B_avg_SUB_ATT, R_avg_SUB_ATT, avg_sub_att_dif
+  )
+  
+UFC.correlation_dif.only = UFC.correlation %>% 
+  select(
+    Winner, punch_elbow_slam, kick_knee, choke, upperbody_lock, lowerbody_lock, decision, total_fight_time_secs, blue_better_rank,
+    red_better_rank, heavyweight, light_heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, 
+    women_flyweight, women_strawweight, title_bout, is_foreign, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, 
+    KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, gender, opposite_stance, total_round_dif, total_title_bout_dif, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct,
+    avg_sub_att_dif
+  )
+
+corr_UFC.dif_only = cor(UFC.correlation_dif.only)
+
+ggcorrplot(corr_UFC.dif_only, method = 'square', type = 'upper', sig.level = 0.2, insig = 'blank', p.mat = cor_pmat(corr_UFC.dif_only), lab = T) + 
+  theme_classic() + 
+  theme(
+    axis.text = element_text(color = 'black'),
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  )
+
+
+log_reg.cor = glm(Winner ~ ev_dif + win_streak_dif + loss_dif + lose_streak_dif + age_dif + reach_dif + sig_str_dif + avg_str_pct + avg_td_dif + avg_td_pct, 
+                  data = training_dif.only, family = binomial(link = "logit"))
+
+summary(log_reg.cor)
+AIC(log_reg.cor)
+
+predict_log_reg.cor = ifelse(predict(log_reg.cor, testing_dif.only, type = "response") > 0.5, "Red", "Blue")
+table(predict_log_reg.cor == testing_dif.only$Winner)
+accuracy_log_reg.cor = round(mean(predict_log_reg.cor == testing_dif.only$Winner)*100, 3)
+accuracy_log_reg.cor
+
+
+# Option 4: Selecting only variables that have significant differences b/t winners 
+
+# Subset training dataset to include numeric only variables and categorical variables 
+
+# Finish Details vs. Winner 
+Winner_vs_Finish.Details = chisq.test(table(training_dif.only$Winner, training_dif.only$finish_details), correct = T)
+Winner_vs_Finish.Details # Include 
+
+# total_fight_time_secs vs. Winner
+Winner_vs_total.time = t.test(training_dif.only$total_fight_time_secs ~ training_dif.only$Winner, correct = T)
+Winner_vs_total.time # Don't Include 
+
+# rank_dif vs. Winner 
+Winner_vs_rank.dif = t.test(training_dif.only$rank_dif ~ training_dif.only$Winner)
+Winner_vs_rank.dif # Include 
+
+# weight_class 
+Winner_vs_Weight.Class = chisq.test(table(training_dif.only$Winner, training_dif.only$weight_class), correct = T)
+Winner_vs_Weight.Class # Don't Include 
+
+# Gender 
+Winner_vs_Gender = chisq.test(table(training_dif.only$Winner, training_dif.only$gender), correct = T)
+Winner_vs_Gender # Don't include
+
+# is_foreign 
+Winner_vs_is.foreign = chisq.test(table(training_dif.only$Winner, training_dif.only$is_foreign), correct = T)
+Winner_vs_is.foreign # Don't include
+
+# title_bout 
+Winner_vs_title.bout = chisq.test(table(training_dif.only$Winner, training_dif.only$title_bout), correct = T)
+Winner_vs_title.bout # Include
+
+# empty arena 
+Winner_vs_empty.arena = chisq.test(table(training_dif.only$Winner, training_dif.only$empty_arena), correct = T)
+Winner_vs_empty.arena # Don't Include
+
+# ev_dif 
+Winner_vs_ev.dif = t.test(training_dif.only$ev_dif ~ training_dif.only$Winner)
+Winner_vs_ev.dif # Include 
+
+# lose_streak_dif 
+Winner_vs_lose.streak.dif = t.test(training_dif.only$lose_streak_dif ~ training_dif.only$Winner)
+Winner_vs_lose.streak.dif # Don't Include 
+
+# win_dif
+Winner_vs_win.dif = t.test(training_dif.only$win_dif ~ training_dif.only$Winner)
+Winner_vs_win.dif # Don't include
+
+# win_streak_dif 
+Winner_vs_win.streak.dif = t.test(training_dif.only$win_streak_dif ~ training_dif.only$Winner)
+Winner_vs_win.streak.dif # Include 
+
+# Longest_win_Streak
+Winner_vs_longest.win.streak.dif = t.test(training_dif.only$longest_win_streak_dif ~ training_dif.only$Winner)
+Winner_vs_longest.win.streak.dif # Don't Include 
+
+# draw_dif 
+Winner_vs_draw.dif = t.test(training_dif.only$draw_dif ~ training_dif.only$Winner)
+Winner_vs_draw.dif # Don't Include 
+
+# Lose_dif
+Winner_vs_lose.dif = t.test(training_dif.only$loss_dif ~ training_dif.only$Winner)
+Winner_vs_lose.dif # INclude 
+
+# KO_dif 
+Winner_vs_KO.dif = t.test(training_dif.only$KO.TKO.Doctor_Stoppage_win_dif ~ training_dif.only$Winner)
+Winner_vs_KO.dif # Don't Include 
+
+# Sub_dif
+Winner_vs_Sub.dif = t.test(training_dif.only$sub_win_dif ~ training_dif.only$Winner)
+Winner_vs_Sub.dif # Don't Include 
+
+# Dec_dif
+Winner_vs_Dec.dif = t.test(training_dif.only$dec_dif ~ training_dif.only$Winner)
+Winner_vs_Dec.dif # Don't Include 
+
+# Age_dif 
+Winner_vs_Age.dif = t.test(training_dif.only$age_dif ~ training_dif.only$Winner)
+Winner_vs_Age.dif # Include 
+
+# Reach_dif 
+Winner_vs_Reach.dif = t.test(training_dif.only$reach_dif ~ training_dif.only$Winner) 
+Winner_vs_Reach.dif # INclude 
+
+# Height_dif
+Winner_vs_Height.dif = t.test(training_dif.only$height_dif ~ training_dif.only$Winner)
+Winner_vs_Height.dif # Don't Include 
+
+# Stance Comparison
+Winner_vs_Stance = chisq.test(table(training_dif.only$Winner, training_dif.only$stance_comparison), correct = T)
+Winner_vs_Stance # Don't Include 
+
+# Sig_str_dif
+Winner_vs_sig.str.dif = t.test(training_dif.only$sig_str_dif ~ training_dif.only$Winner)
+Winner_vs_sig.str.dif # INclude 
+
+# Sig_str_pct
+Winner_vs_sig.str.pct = t.test(training_dif.only$avg_str_pct ~ training_dif.only$Winner) 
+Winner_vs_sig.str.pct # Include 
+
+# avg_td_dif
+Winner_vs_avg.td.dif = t.test(training_dif.only$avg_td_dif ~ training_dif.only$Winner)
+Winner_vs_avg.td.dif # Include 
+
+# avg_td_pct 
+Winner_vs_avg.td.pct = t.test(training_dif.only$avg_td_pct ~ training_dif.only$Winner)
+Winner_vs_avg.td.pct # Include 
+
+# avg_sub_att
+Winner_vs_avg.sub.att = t.test(training_dif.only$avg_sub_att_dif ~ training_dif.only$Winner)
+Winner_vs_avg.sub.att # Don't Include 
+
+# total_round_dif 
+Winner_vs_total.rounds = t.test(training_dif.only$total_round_dif ~ training_dif.only$Winner)
+Winner_vs_total.rounds # Include 
+
+# total_title_bout_dif 
+Winner_vs_total.title.bouts = t.test(training_dif.only$total_title_bout_dif ~ training_dif.only$Winner)
+Winner_vs_total.title.bouts # Don't Include 
+
+log_reg.association = glm(Winner ~ finish_details + rank_dif + title_bout + ev_dif + win_streak_dif + loss_dif + age_dif+ reach_dif + sig_str_dif + avg_str_pct + avg_td_dif + avg_td_pct + total_round_dif, data = training_dif.only, family = binomial(link = "logit"))
+
+summary(log_reg.association)
+AIC(log_reg.association)
+
+pred_log_reg.association = ifelse(predict(log_reg.association, testing_dif.only, type = "response") > 0.5, "Red", "Blue")
+table(pred_log_reg.association, testing_dif.only$Winner)
+accuracy_log_reg.association = round(mean(pred_log_reg.association == testing_dif.only$Winner)*100, 3)
+accuracy_log_reg.association
