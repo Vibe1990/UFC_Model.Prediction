@@ -1,0 +1,97 @@
+
+training_dif.only = training_set %>% 
+  select(Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+  
+testing_dif.only = testing_set %>% 
+  select(
+    Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+  ) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+
+set.seed(1234)
+rf_basic = ranger(Winner ~., data = training_dif.only, num.trees = 1500, mtry = NULL, importance = "impurity", min.node.size = 1, probability = F)
+accuracy_rf_basic = round(mean(rf_basic$predictions == training_dif.only$Winner)*100, 3)
+accuracy_rf_basic
+
+pred_rf.basic = predict(rf_basic, testing_dif.only, type = "response")$predictions
+table(pred_rf.basic, testing_dif.only$Winner)
+accuracy_rf_basic = round(mean(pred_rf.basic == testing_dif.only$Winner)*100, 3)
+accuracy_rf_basic
+
+# Create a parameter grid for tuning model 
+
+rf.hyper_grid = expand.grid(
+  mtry = seq(1, 10, by = 1), 
+  min.node.size = seq(1, 20, by = 1), 
+  splitrule = "gini",
+  accuracy_score = 0
+)
+
+# Use a for-loop to observe performance of each entry in the parameter grid. 
+
+for (i in 1:nrow(rf.hyper_grid)) {
+  
+  # train model 
+  set.seed(1234)
+  model = ranger(Winner ~., 
+                 data = training_dif.only, 
+                 num.trees = 1500, 
+                 mtry = rf.hyper_grid$mtry[i],
+                 importance = "impurity",
+                 min.node.size = rf.hyper_grid$min.node.size[i], 
+                 splitrule = "gini")
+  
+  pred_model = predict(model, testing_dif.only, type = "response")$predictions
+  accuracy = round(mean(pred_model == testing_dif.only$Winner)*100, 3)
+  rf.hyper_grid$accuracy_score[i] = accuracy
+}
+
+# Plotting the most important variables used in modeling
+
+var.important = as.vector(round(rf_best.tuned$variable.importance, 3))
+var.names = as.vector(names(training_dif.only)[-1])
+DF.ranger_model = as.data.frame(cbind(var.names, var.important))
+DF.ranger_model
+
+DF.ranger_model %>% 
+  mutate(
+    var.important = as.numeric(var.important)
+  ) %>% 
+  arrange(desc(var.important)) %>% 
+  top_n(15) %>% 
+  ggplot(
+    aes(x = reorder(var.names, var.important), y = var.important, fill = var.important)
+    ) +
+  geom_bar(
+    stat = 'identity', position = 'dodge'
+  ) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(color = 'black', angle = 90, hjust = 1),
+    axis.text = element_text(color = 'black')
+  ) +
+  labs(x = "Important variables") + 
+  coord_flip() 
+
+# Observe to find the best parameters
+rf.hyper_grid
+best_parameter = rf.hyper_grid %>% arrange(desc(accuracy_score)) %>% top_n(1)
+
+# Create a tuned model 
+
+set.seed(1234)
+rf_best.tuned = ranger(Winner ~., data = training_dif.only, mtry = best_parameter$mtry, min.node.size = best_parameter$min.node.size, importance = "impurity", splitrule = best_parameter$splitrule, num.trees = 1500)
+pred_rf.tuned = predict(rf_best.tuned, testing_dif.only, type = 'response')$predictions
+accuracy_rf = round(mean(pred_rf.tuned == testing_dif.only$Winner)*100, 3)
+accuracy_rf
