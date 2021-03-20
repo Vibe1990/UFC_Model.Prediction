@@ -40,7 +40,7 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/UFC_Outcome_Prediction_Recap.PNG)
 
-* With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), it was shown that the chosen approach of using a logistic regression model with variable selection using correlates outperformed the projected mma analysis. Under the impression of wagering $100 per fight, overall profit was $469.07 (~ 46.91% profit). 
+* With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), it was shown that the chosen approach of using a logistic regression model with variable selection using correlates outperformed the projected mma analysis (8 vs. 7). Under the assumption of wagering $100 per each fight match-up, the overall profit was $469.07 (~ 46.91% profit) using chosen model algorithm vs. $353.13 (~ 35.31% profit) using the proposed mma analyst picks. 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/Compare_model_picks_vs_analysis.PNG)
 
@@ -125,6 +125,8 @@ The data consisted of data collected from the period of 2010-03-21 to 2021-02-10
 
 ## Technical Overview
 
-
+* Data cleaning and Variable Engineering 
+* Supervised Machine Learning 
+* Model Evaluation
 
 
