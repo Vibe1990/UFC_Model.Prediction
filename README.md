@@ -36,7 +36,9 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 
 ## Results
 
-* A comparison of 
+* A comparative analysis of the different modeling appraoches to outcome prediction found that (1) logistic regressions building with variables that significantly differ from winenrs and losers and (2) logistic regression bulit with variables correlated with fight outcomes were the two highest performing models. 
+
+![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/UFC_Outcome_Prediction_Recap.PNG)
 
 
 
