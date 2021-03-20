@@ -40,6 +40,6 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/UFC_Outcome_Prediction_Recap.PNG)
 
-
+* With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), 
 
 
