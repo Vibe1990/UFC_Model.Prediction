@@ -44,6 +44,13 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/Compare_model_picks_vs_analysis.PNG)
 
-* Using a 
+
+## Data Description 
+
+The data consisted of data collected from the period of 2010-03-21 to 2021-02-10 that was scrapped from the UFC Stat site and made available on [Kaggle](https://www.kaggle.com/mdabbert/ultimate-ufc-dataset).  There are two data sets used in this project: 
+
+1) [Historical data]()
+2) 9Pre-fight data for UFC 258]()
+
 
 
