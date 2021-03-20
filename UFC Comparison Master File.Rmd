@@ -1,0 +1,1386 @@
+---
+title: "UFC Predictions"
+author: "Michael Hoang"
+date: "18/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen = 999) # to avoid scientific notations 
+setwd("~/MyDatasets")	
+
+```
+
+# Loading necessary libraries 
+
+```{r, warning = F, message = F}
+
+library(tidyverse) # Contains a lot of packages necessary for piplining, plotting, etc.
+library(ranger) # A faster engine for Random Forest models 
+library(parallel)
+library(skimr) # For data exploration
+library(doParallel) # Will need it for parallel computation to optimize hyperparameters 
+library(xgboost) # For extreme gradient boost modeling 
+library(rpart) # For classification modeling 
+library(rpart.plot) # Used to plot a decision tree
+library(class) # For k-Nearest Neighbour modeling 
+library(corrr) # For correlation
+library(ggcorrplot) # For plotting correlation matrix
+library(caret) # Used to make training models 
+library(mlr) # For machine learning in r
+
+```
+
+# Reading the necessary data sets 
+
+```{r}
+
+ufc = read.csv('ufc-master.csv')
+
+UFC_258 = read.csv("upcoming-event.csv")
+
+```
+
+# Data Cleaning + Variable Engineering
+
+```{r}
+
+# Date
+
+ufc$date = gsub("/", "-", ufc$date) # replaces the "/" with "-"
+ufc$date = lubridate::mdy(ufc$date) # converts the date variable from character to a date
+UFC_258$date = gsub("/", "-", UFC_258$date)
+UFC_258$date = lubridate::mdy(UFC_258$date)
+
+# Country
+
+ufc$country = trimws(ufc$country, which = 'both')
+ufc = ufc %>% mutate(country = as.factor(country)) %>% mutate(country = relevel(country, ref = "USA"))
+UFC_258$country = trimws(UFC_258$country, which = 'both')
+UFC_258 = UFC_258 %>% mutate(country = as.factor(country)) %>% mutate(country = relevel(country, ref = "USA"))
+
+# Gender
+
+ufc$gender = as.factor(ufc$gender)
+ufc$gender = relevel(ufc$gender, ref = "MALE")
+UFC_258$gender = as.factor(UFC_258$gender)
+UFC_258$gender = relevel(UFC_258$gender, ref = "MALE")
+
+# Stance 
+
+ufc$B_Stance = trimws(ufc$B_Stance, which = 'both')
+ufc$R_Stance = trimws(ufc$R_Stance, which = 'both')
+ufc = ufc %>% mutate(R_Stance = as.factor(R_Stance), B_Stance = as.factor(B_Stance))
+ufc = ufc %>% mutate(R_Stance = relevel(R_Stance, ref = "Orthodox"), B_Stance = relevel(B_Stance, ref = "Orthodox"))
+
+UFC_258$B_Stance = trimws(UFC_258$B_Stance, which = 'both')
+UFC_258$R_Stance = trimws(UFC_258$R_Stance, which = 'both')
+UFC_258 = UFC_258 %>% mutate(R_Stance = as.factor(R_Stance), B_Stance = as.factor(B_Stance))
+UFC_258 = UFC_258 %>% mutate(R_Stance = relevel(R_Stance, ref = "Orthodox"), B_Stance = relevel(B_Stance, ref = "Orthodox"))
+
+# Location
+
+ufc = ufc %>% mutate(location = as.factor(location))
+ufc = ufc %>% mutate(location = relevel(location, ref = "Las Vegas, Nevada, USA"))
+UFC_258 = UFC_258 %>% mutate(location = as.factor(location))
+UFC_258 = UFC_258 %>% mutate(location = relevel(location, ref = "Las Vegas, Nevada, USA"))
+
+# Weight Class
+
+ufc = ufc %>% mutate(weight_class = as.factor(weight_class)) %>% mutate(weight_class = relevel(weight_class, ref = "Catch Weight"))
+UFC_258 = UFC_258 %>% mutate(weight_class = as.factor(weight_class)) %>% mutate(weight_class = relevel(weight_class, ref = "Catch Weight"))
+
+# Finish & Finish Details
+
+ufc = ufc %>% mutate(finish = as.factor(finish))
+ufc = ufc %>% filter(finish != "DQ") %>% filter(finish != "Overturned")
+ufc = ufc %>% mutate(finish = ifelse(c(finish == "M-DEC" | finish == "U-DEC"), "DEC",
+                              ifelse(finish == "KO/TKO", "KO/TKO",
+                              ifelse(finish == "SUB", "SUB",
+                              ifelse(finish == "S-DEC", "S-DEC", NA)))))
+ufc = ufc %>% mutate(finish = as.factor(finish)) %>% mutate(finish = relevel(finish, ref = "S-DEC"))
+
+ufc = ufc %>% 
+  mutate(
+    finish_details = ifelse(finish_details == "", "Decision", 
+                     ifelse(finish_details == "Anaconda Choke", "Choke", 
+                     ifelse(finish_details == "Ankle Lock", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Arm Triangle", "Choke",
+                     ifelse(finish_details == "Armbar", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Body Triangle", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Corner Stoppage", "Intervention", 
+                     ifelse(finish_details == "D'Arce Choke", "Choke", 
+                     ifelse(finish_details == "Doctor Stoppage", "Intervention", 
+                     ifelse(finish_details == "Elbow", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Elbows", "Punch/Elbow/Slam", 
+                     ifelse(finish_details == "Flying Knee", "Kick/Knee", 
+                     ifelse(finish_details == "Forearm Choke", "Choke", 
+                     ifelse(finish_details == "Guillotine Choke", "Choke", 
+                     ifelse(finish_details == "Heel Hook", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Injury", "Intervention", 
+                     ifelse(finish_details == "Japanese Necktie", "Choke",
+                     ifelse(finish_details == "Keylock", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Kick", "Kick/Knee", 
+                     ifelse(finish_details == "Kicks", "Kick/Knee",
+                     ifelse(finish_details == "Kimura", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Knee", "Kick/Knee",
+                     ifelse(finish_details == "Kneebar", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Knees", "Kick/Knee",
+                     ifelse(finish_details == "Neck Crank", "Upperbody Joint Lock",
+                     ifelse(finish_details == "North-South Choke", "Choke",
+                     ifelse(finish_details == "Omoplata", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Other - Choke", "Choke",
+                     ifelse(finish_details == "Other - Lock", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Calf Slicer", "Lowerbody Joint Lock", 
+                     ifelse(finish_details == "Face Crank", "Upperbody Joint Lock", 
+                     ifelse(finish_details == "Peruvian Necktie", "Choke",
+                     ifelse(finish_details == "Punch", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Punches", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Rear Naked Choke", "Choke",
+                     ifelse(finish_details == "Scarf Hold Choke", "Choke",
+                     ifelse(finish_details == "Slam", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Spinning Back Fist", "Punch/Elbow/Slam",
+                     ifelse(finish_details == "Spinning Back Kick", "Kick/Knee",
+                     ifelse(finish_details == "Triangle Choke", "Choke",
+                     ifelse(finish_details == "Twister", "Upperbody Joint Lock",
+                     ifelse(finish_details == "Von Flue Choke", "Choke", NA))))))))))))))))))))))))))))))))))))))))))
+  ) 
+
+ufc = ufc %>% mutate(finish_details = as.factor(finish_details)) %>% mutate(finish_details = relevel(finish_details, ref = "Decision"))
+
+# Rankings 
+
+ufc = ufc %>% mutate(better_rank = as.factor(better_rank)) %>% mutate(better_rank = relevel(better_rank, ref = "neither"))
+UFC_258 = UFC_258 %>% mutate(better_rank = as.factor(better_rank)) %>% mutate(better_rank = relevel(better_rank, ref = "neither"))
+
+
+# Engineering Variables - Win differentials 
+
+ufc = ufc %>% mutate(
+  KO.TKO.Doctor_Stoppage_win_dif = (B_win_by_KO.TKO + B_win_by_TKO_Doctor_Stoppage) - (R_win_by_KO.TKO + R_win_by_TKO_Doctor_Stoppage),
+  sub_win_dif = (B_win_by_Submission - R_win_by_Submission), 
+  dec_dif = (B_win_by_Decision_Majority + B_win_by_Decision_Unanimous + B_win_by_Decision_Split) - (R_win_by_Decision_Majority + R_win_by_Decision_Unanimous + R_win_by_Decision_Split)
+)
+
+UFC_258 = UFC_258 %>% mutate(
+  KO.TKO.Doctor_Stoppage_win_dif = (B_win_by_KO.TKO + B_win_by_TKO_Doctor_Stoppage) - (R_win_by_KO.TKO + R_win_by_TKO_Doctor_Stoppage),
+  sub_win_dif = (B_win_by_Submission - R_win_by_Submission), 
+  dec_dif = (B_win_by_Decision_Majority + B_win_by_Decision_Unanimous + B_win_by_Decision_Split) - (R_win_by_Decision_Majority + R_win_by_Decision_Unanimous + R_win_by_Decision_Split) 
+)
+
+# Engineering Variables - Accuracy differential for takedowns and strikes
+
+ufc = ufc %>% mutate(avg_str_pct = (B_avg_SIG_STR_pct - R_avg_SIG_STR_pct), avg_td_pct = (B_avg_TD_pct - R_avg_TD_pct))
+UFC_258 = UFC_258 %>% mutate(avg_str_pct = (B_avg_SIG_STR_pct - R_avg_SIG_STR_pct), avg_td_pct = (B_avg_TD_pct - R_avg_TD_pct))
+
+# Engineering Variables - Odds + Payouts Differentials 
+
+ufc = ufc %>% mutate(odds_dif = (B_odds - R_odds), ev_dif = (B_ev - R_ev))
+UFC_258 = UFC_258 %>% mutate(odds_dif = (B_odds - R_odds), ev_dif = (B_ev - R_ev))
+
+# Engineering Variables - Draw differentials 
+
+ufc = ufc %>% mutate(draw_dif = (B_draw - R_draw))
+UFC_258 = UFC_258 %>% mutate(draw_dif = (B_draw - R_draw))
+
+# Engineering Variables - Ranking differentials
+## An issue that does come up pertain to the women's featherweight class. This is largely due to the lack of depth in that weight class, so there really isn't any rankings here.  
+# Best solution is to identify previous/current chamption and list it as "0" and everyone else as "1". 
+
+ufc = ufc %>% 
+  mutate(
+    R_Women.s.Bantamweight_rank = ifelse(is.na(R_Women.s.Bantamweight_rank), 16, R_Women.s.Bantamweight_rank),
+    B_Women.s.Bantamweight_rank = ifelse(is.na(B_Women.s.Bantamweight_rank), 16, B_Women.s.Bantamweight_rank),
+    R_Women.s.Flyweight_rank = ifelse(is.na(R_Women.s.Flyweight_rank), 16, R_Women.s.Flyweight_rank),
+    B_Women.s.Flyweight_rank = ifelse(is.na(B_Women.s.Flyweight_rank), 16, B_Women.s.Flyweight_rank),
+    R_Women.s.Strawweight_rank = ifelse(is.na(R_Women.s.Strawweight_rank), 16, R_Women.s.Strawweight_rank),
+    B_Women.s.Strawweight_rank = ifelse(is.na(B_Women.s.Strawweight_rank), 16, B_Women.s.Strawweight_rank),
+    R_Flyweight_rank = ifelse(is.na(R_Flyweight_rank), 16, R_Flyweight_rank),
+    B_Flyweight_rank = ifelse(is.na(B_Flyweight_rank), 16, B_Flyweight_rank),
+    R_Bantamweight_rank = ifelse(is.na(R_Bantamweight_rank), 16, R_Bantamweight_rank),
+    B_Bantamweight_rank = ifelse(is.na(B_Bantamweight_rank), 16, B_Bantamweight_rank),
+    R_Featherweight_rank = ifelse(is.na(R_Featherweight_rank), 16, R_Featherweight_rank),
+    B_Featherweight_rank = ifelse(is.na(B_Featherweight_rank), 16, B_Featherweight_rank),
+    R_Lightweight_rank = ifelse(is.na(R_Lightweight_rank), 16, R_Lightweight_rank),
+    B_Lightweight_rank = ifelse(is.na(B_Lightweight_rank), 16, B_Lightweight_rank),
+    R_Welterweight_rank = ifelse(is.na(R_Welterweight_rank), 16, R_Welterweight_rank),
+    B_Welterweight_rank = ifelse(is.na(B_Welterweight_rank), 16, B_Welterweight_rank),
+    R_Middleweight_rank = ifelse(is.na(R_Middleweight_rank), 16, R_Middleweight_rank),
+    B_Middleweight_rank = ifelse(is.na(B_Middleweight_rank), 16, B_Middleweight_rank),
+    R_Light.Heavyweight_rank = ifelse(is.na(R_Light.Heavyweight_rank), 16, R_Light.Heavyweight_rank),
+    B_Light.Heavyweight_rank = ifelse(is.na(B_Light.Heavyweight_rank), 16, B_Light.Heavyweight_rank),
+    R_Heavyweight_rank = ifelse(is.na(R_Heavyweight_rank), 16, R_Heavyweight_rank),
+    B_Heavyweight_rank = ifelse(is.na(B_Heavyweight_rank), 16, B_Heavyweight_rank), 
+    R_match_weightclass_rank = ifelse(is.na(R_match_weightclass_rank), 16, R_match_weightclass_rank),
+    B_match_weightclass_rank = ifelse(is.na(B_match_weightclass_rank), 16, B_match_weightclass_rank)
+  ) %>% 
+  mutate(
+    rank_dif = ifelse(weight_class == "Heavyweight", B_Heavyweight_rank - R_Heavyweight_rank,
+               ifelse(weight_class == "Light Heavyweight", B_Light.Heavyweight_rank - R_Light.Heavyweight_rank,
+               ifelse(weight_class == "Middleweight", B_Middleweight_rank - R_Middleweight_rank,
+               ifelse(weight_class == "Welterweight", B_Welterweight_rank - R_Welterweight_rank,
+               ifelse(weight_class == "Lightweight", B_Lightweight_rank - R_Lightweight_rank,
+               ifelse(weight_class == "Featherweight", B_Featherweight_rank - R_Featherweight_rank,
+               ifelse(weight_class == "Bantamweight", B_Bantamweight_rank - R_Bantamweight_rank,
+               ifelse(weight_class == "Flyweight", B_Flyweight_rank - R_Flyweight_rank,
+               ifelse(weight_class == "Women's Bantamweight", B_Women.s.Bantamweight_rank - R_Women.s.Bantamweight_rank, 
+               ifelse(weight_class == "Women's Flyweight", B_Women.s.Flyweight_rank - R_Women.s.Flyweight_rank, 
+               ifelse(weight_class == "Women's Strawweight", B_Women.s.Strawweight_rank - R_Women.s.Strawweight_rank, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Amanda Nunes"), 1, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Cris Cyborg" & B_fighter != "Felicia Spencer"), 1, 0))))))))))))) 
+  )
+
+UFC_258 = UFC_258 %>% 
+  mutate(
+    R_Women.s.Bantamweight_rank = ifelse(is.na(R_Women.s.Bantamweight_rank), 16, R_Women.s.Bantamweight_rank),
+    B_Women.s.Bantamweight_rank = ifelse(is.na(B_Women.s.Bantamweight_rank), 16, B_Women.s.Bantamweight_rank),
+    R_Women.s.Flyweight_rank = ifelse(is.na(R_Women.s.Flyweight_rank), 16, R_Women.s.Flyweight_rank),
+    B_Women.s.Flyweight_rank = ifelse(is.na(B_Women.s.Flyweight_rank), 16, B_Women.s.Flyweight_rank),
+    R_Women.s.Strawweight_rank = ifelse(is.na(R_Women.s.Strawweight_rank), 16, R_Women.s.Strawweight_rank),
+    B_Women.s.Strawweight_rank = ifelse(is.na(B_Women.s.Strawweight_rank), 16, B_Women.s.Strawweight_rank),
+    R_Flyweight_rank = ifelse(is.na(R_Flyweight_rank), 16, R_Flyweight_rank),
+    B_Flyweight_rank = ifelse(is.na(B_Flyweight_rank), 16, B_Flyweight_rank),
+    R_Bantamweight_rank = ifelse(is.na(R_Bantamweight_rank), 16, R_Bantamweight_rank),
+    B_Bantamweight_rank = ifelse(is.na(B_Bantamweight_rank), 16, B_Bantamweight_rank),
+    R_Featherweight_rank = ifelse(is.na(R_Featherweight_rank), 16, R_Featherweight_rank),
+    B_Featherweight_rank = ifelse(is.na(B_Featherweight_rank), 16, B_Featherweight_rank),
+    R_Lightweight_rank = ifelse(is.na(R_Lightweight_rank), 16, R_Lightweight_rank),
+    B_Lightweight_rank = ifelse(is.na(B_Lightweight_rank), 16, B_Lightweight_rank),
+    R_Welterweight_rank = ifelse(is.na(R_Welterweight_rank), 16, R_Welterweight_rank),
+    B_Welterweight_rank = ifelse(is.na(B_Welterweight_rank), 16, B_Welterweight_rank),
+    R_Middleweight_rank = ifelse(is.na(R_Middleweight_rank), 16, R_Middleweight_rank),
+    B_Middleweight_rank = ifelse(is.na(B_Middleweight_rank), 16, B_Middleweight_rank),
+    R_Light.Heavyweight_rank = ifelse(is.na(R_Light.Heavyweight_rank), 16, R_Light.Heavyweight_rank),
+    B_Light.Heavyweight_rank = ifelse(is.na(B_Light.Heavyweight_rank), 16, B_Light.Heavyweight_rank),
+    R_Heavyweight_rank = ifelse(is.na(R_Heavyweight_rank), 16, R_Heavyweight_rank),
+    B_Heavyweight_rank = ifelse(is.na(B_Heavyweight_rank), 16, B_Heavyweight_rank), 
+    R_match_weightclass_rank = ifelse(is.na(R_match_weightclass_rank), 16, R_match_weightclass_rank),
+    B_match_weightclass_rank = ifelse(is.na(B_match_weightclass_rank), 16, B_match_weightclass_rank)
+  ) %>% 
+  mutate(
+    rank_dif = ifelse(weight_class == "Heavyweight", B_Heavyweight_rank - R_Heavyweight_rank,
+               ifelse(weight_class == "Light Heavyweight", B_Light.Heavyweight_rank - R_Light.Heavyweight_rank,
+               ifelse(weight_class == "Middleweight", B_Middleweight_rank - R_Middleweight_rank,
+               ifelse(weight_class == "Welterweight", B_Welterweight_rank - R_Welterweight_rank,
+               ifelse(weight_class == "Lightweight", B_Lightweight_rank - R_Lightweight_rank,
+               ifelse(weight_class == "Featherweight", B_Featherweight_rank - R_Featherweight_rank,
+               ifelse(weight_class == "Bantamweight", B_Bantamweight_rank - R_Bantamweight_rank,
+               ifelse(weight_class == "Flyweight", B_Flyweight_rank - R_Flyweight_rank,
+               ifelse(weight_class == "Women's Bantamweight", B_Women.s.Bantamweight_rank - R_Women.s.Bantamweight_rank, 
+               ifelse(weight_class == "Women's Flyweight", B_Women.s.Flyweight_rank - R_Women.s.Flyweight_rank, 
+               ifelse(weight_class == "Women's Strawweight", B_Women.s.Strawweight_rank - R_Women.s.Strawweight_rank, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Amanda Nunes"), 1, 
+               ifelse(c(weight_class == "Women's Featherweight" & R_fighter == "Cris Cyborg" & B_fighter != "Felicia Spencer"), 1, 0))))))))))))) 
+  )
+
+# Engineering Variables - Is the event held in a different country? 
+
+ufc = ufc %>% mutate(is_foreign = ifelse(country == "USA", F, T))
+UFC_258 = UFC_258 %>% mutate(is_foreign = ifelse(country == "USA", F, T))
+
+# Engineering Variables - Stance Comparison
+
+ufc =  ufc %>% 
+  mutate(
+    stance_comparison = as.factor(ifelse(c(R_Stance == "Orthodox" & B_Stance == "Orthodox"), "Same",
+                        ifelse(c(R_Stance == "Southpaw" & B_Stance == "Southpaw"), "Same",
+                        ifelse(c(R_Stance == "Switch" & B_Stance == "Switch"), "Same",
+                        ifelse(c(R_Stance == "Open Stance" & B_Stance == "Open Stance"), "Same", "Opposite")))))
+    )
+
+UFC_258 =  UFC_258 %>% 
+  mutate(
+    stance_comparison = as.factor(ifelse(c(R_Stance == "Orthodox" & B_Stance == "Orthodox"), "Same",
+                        ifelse(c(R_Stance == "Southpaw" & B_Stance == "Southpaw"), "Same",
+                        ifelse(c(R_Stance == "Switch" & B_Stance == "Switch"), "Same",
+                        ifelse(c(R_Stance == "Open Stance" & B_Stance == "Open Stance"), "Same", "Opposite")))))
+    )
+
+```
+
+# Reorganizing everything to be readable
+
+```{r}
+
+UFC = ufc %>% select(
+  constant_1, Winner, finish, finish_details, total_fight_time_secs, R_fighter, B_fighter, R_match_weightclass_rank, B_match_weightclass_rank, better_rank, rank_dif, weight_class, gender, date, location, country, is_foreign, title_bout, empty_arena, R_odds, B_odds, odds_dif, R_ev, B_ev, ev_dif, R_wins, B_wins, win_dif, R_current_win_streak, B_current_win_streak, win_streak_dif, R_longest_win_streak, B_longest_win_streak, longest_win_streak_dif, R_draw, B_draw, draw_dif, R_losses, B_losses, loss_dif, R_current_lose_streak, B_current_lose_streak, lose_streak_dif, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, KO.TKO.Doctor_Stoppage_win_dif, R_win_by_Submission, B_win_by_Submission, sub_win_dif, R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, dec_dif, R_age, B_age, age_dif, R_Height_cms, B_Height_cms, height_dif, R_Reach_cms, B_Reach_cms, reach_dif, R_Stance, B_Stance, stance_comparison, R_avg_SIG_STR_landed, B_avg_SIG_STR_landed, sig_str_dif, R_avg_SIG_STR_pct, B_avg_SIG_STR_pct, avg_str_pct, R_avg_TD_landed, B_avg_TD_landed, avg_td_dif, R_avg_TD_pct, B_avg_TD_pct, avg_td_pct, R_avg_SUB_ATT, B_avg_SUB_ATT, avg_sub_att_dif, R_total_rounds_fought, B_total_rounds_fought, total_round_dif, R_total_title_bouts, B_total_title_bouts, total_title_bout_dif) %>% 
+  mutate(Winner = as.factor(Winner)) %>% 
+  mutate(Winner = relevel(Winner, ref = "Blue")) %>% 
+  na.omit() 
+
+UFC_258_clean = UFC_258 %>% 
+  select(Winner, finish, finish_details, total_fight_time_secs, R_fighter, B_fighter, R_match_weightclass_rank, B_match_weightclass_rank, better_rank, rank_dif, weight_class, gender, date, location, country, is_foreign, title_bout, empty_arena, R_odds, B_odds, odds_dif, R_ev, B_ev, ev_dif, R_wins, B_wins, win_dif, R_current_win_streak, B_current_win_streak, win_streak_dif, R_longest_win_streak, B_longest_win_streak, longest_win_streak_dif, R_draw, B_draw, draw_dif, R_losses, B_losses, loss_dif, R_current_lose_streak, B_current_lose_streak, lose_streak_dif, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, KO.TKO.Doctor_Stoppage_win_dif, R_win_by_Submission, B_win_by_Submission, sub_win_dif, R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, dec_dif, R_age, B_age, age_dif, R_Height_cms, B_Height_cms, height_dif, R_Reach_cms, B_Reach_cms, reach_dif, R_Stance, B_Stance, stance_comparison, R_avg_SIG_STR_landed, B_avg_SIG_STR_landed, sig_str_dif, R_avg_SIG_STR_pct, B_avg_SIG_STR_pct, avg_str_pct, R_avg_TD_landed, B_avg_TD_landed, avg_td_dif, R_avg_TD_pct, B_avg_TD_pct, avg_td_pct, R_avg_SUB_ATT, B_avg_SUB_ATT, avg_sub_att_dif, R_total_rounds_fought, B_total_rounds_fought, total_round_dif, R_total_title_bouts, B_total_title_bouts, total_title_bout_dif)  
+
+
+```
+
+# Creating a correlation matrix 
+
+```{r, fig.height = 15, fig.width=15}
+
+UFC.correlation_pt.1 = UFC %>% 
+  mutate(
+    Winner = as.numeric(ifelse(Winner == "Red", 1, 0)),
+    punch_elbow_slam = as.numeric(ifelse(finish_details == "Punch/Elbow/Slam", 1, 0)), 
+    kick_knee = as.numeric(ifelse(finish_details == "Kick/Knee", 1, 0)), 
+    decision = as.numeric(ifelse(finish_details == "Decision", 1, 0)), 
+    choke = as.numeric(ifelse(finish_details == "Choke", 1, 0)), 
+    lowerbody_lock = as.numeric(ifelse(finish_details == "Lowerbody Joint Lock", 1, 0)), 
+    upperbody_lock = as.numeric(ifelse(finish_details == "Upperbody Joint Lock", 1, 0)), 
+    blue_better_rank = as.numeric(ifelse(better_rank == "Blue", 1, 0)),
+    red_better_rank = as.numeric(ifelse(better_rank == "Red", 1, 0)),
+    gender = as.numeric(ifelse(gender == "MALE", 0, 1)), 
+    heavyweight = as.numeric(ifelse(weight_class == "Heavyweight", 1, 0)), 
+    light_heavyweight = as.numeric(ifelse(weight_class == "Light Heavyweight", 1, 0)), 
+    middleweight = as.numeric(ifelse(weight_class == "Middleweight", 1, 0)),
+    welterweight = as.numeric(ifelse(weight_class == "Welterweight", 1, 0)),
+    lightweight = as.numeric(ifelse(weight_class == "Lightweight", 1, 0)),
+    featherweight = as.numeric(ifelse(weight_class == "Featherweight", 1, 0)),
+    bantamweight = as.numeric(ifelse(weight_class == "Bantamweight", 1, 0)),
+    flyweight = as.numeric(ifelse(weight_class == "Flyweight", 1, 0)),
+    women_featherweight = as.numeric(ifelse(weight_class == "Women's Featherweight", 1, 0)),
+    women_bantamweight = as.numeric(ifelse(weight_class == "Women's Bantamweight", 1, 0)),
+    women_flyweight = as.numeric(ifelse(weight_class == "Women's Flyweight", 1, 0)),
+    women_strawweight = as.numeric(ifelse(weight_class == "Women's Strawweight", 1, 0)),
+    is_foreign = as.numeric(ifelse(is_foreign == TRUE, 1, 0)), 
+    title_bout = as.numeric(ifelse(title_bout == TRUE, 1, 0)), 
+    opposite_stance = as.numeric(ifelse(stance_comparison == "Opposite", 1, 0))
+  )
+
+UFC.correlation_pt.2 = UFC.correlation_pt.1 %>% 
+  select(
+    -R_fighter, -B_fighter, -date, -finish, -finish_details, -better_rank, -weight_class, -location, -country, -R_Stance, -B_Stance, -stance_comparison, -constant_1
+  )
+
+
+UFC.correlation = UFC.correlation_pt.2 %>% 
+  select(
+    Winner, punch_elbow_slam, kick_knee, choke, upperbody_lock, lowerbody_lock, decision, total_fight_time_secs, B_match_weightclass_rank, R_match_weightclass_rank, blue_better_rank,
+    red_better_rank, heavyweight, light_heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, 
+    women_flyweight, women_strawweight, title_bout, is_foreign, empty_arena, B_ev, R_ev, ev_dif, B_wins, R_wins, win_dif, B_current_win_streak,
+    R_current_win_streak, win_streak_dif, B_longest_win_streak, R_longest_win_streak, longest_win_streak_dif, B_draw, R_draw, draw_dif, B_losses, R_losses, loss_dif, 
+    B_current_lose_streak, R_current_lose_streak, lose_streak_dif, B_win_by_KO.TKO, B_win_by_TKO_Doctor_Stoppage, R_win_by_KO.TKO, R_win_by_TKO_Doctor_Stoppage, 
+    KO.TKO.Doctor_Stoppage_win_dif, B_win_by_Submission, R_win_by_Submission, sub_win_dif, B_win_by_Decision_Split, B_win_by_Decision_Majority, B_win_by_Decision_Unanimous, 
+    R_win_by_Decision_Split, R_win_by_Decision_Majority, R_win_by_Decision_Unanimous, dec_dif, B_age, R_age, age_dif, B_Height_cms, R_Height_cms, height_dif, B_Reach_cms, 
+    R_Reach_cms, reach_dif, gender, opposite_stance, B_total_rounds_fought, R_total_rounds_fought, total_round_dif, B_total_title_bouts, R_total_title_bouts, total_title_bout_dif, 
+    B_avg_SIG_STR_landed, R_avg_SIG_STR_landed, sig_str_dif, B_avg_SIG_STR_pct, R_avg_SIG_STR_pct, avg_str_pct, B_avg_TD_landed, R_avg_TD_landed, avg_td_dif, B_avg_TD_pct, 
+    R_avg_TD_pct, avg_td_pct, B_avg_SUB_ATT, R_avg_SUB_ATT, avg_sub_att_dif
+  )
+
+corr_UFC = cor(UFC.correlation)
+
+ggcorrplot(corr_UFC, method = "square", type = "upper", sig.level = 0.2, insig = "blank", p.mat = cor_pmat(corr_UFC)) + 
+  theme_classic() +
+  theme(
+    panel.background = element_rect(fill = "white"), 
+    axis.text = element_text(color = "black"), 
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+UFC.correlation_dif.only = UFC.correlation %>% 
+  select(
+    Winner, punch_elbow_slam, kick_knee, choke, upperbody_lock, lowerbody_lock, decision, total_fight_time_secs, blue_better_rank,
+    red_better_rank, heavyweight, light_heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, 
+    women_flyweight, women_strawweight, title_bout, is_foreign, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, 
+    KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, gender, opposite_stance, total_round_dif, total_title_bout_dif, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct,
+    avg_sub_att_dif
+  )
+
+corr_UFC.dif_only = cor(UFC.correlation_dif.only)
+
+ggcorrplot(corr_UFC.dif_only, method = 'square', type = 'upper', sig.level = 0.2, insig = 'blank', p.mat = cor_pmat(corr_UFC.dif_only)) + 
+  theme_classic() + 
+  theme(
+    axis.text = element_text(color = 'black'),
+    axis.text.x = element_text(angle = 90, hjust = 1)
+  )
+
+
+```
+
+# Creating a variable that would have simulated analyst pick
+
+```{r}
+
+ufc %>% group_by(R_odds) %>% summarise(count = n()) %>% arrange(desc(R_odds))
+
+length(UFC$constant_1[UFC$R_odds > 0]) # 1160 matchups had the "red corner" fighter projected as the underdog (i.e. not the winner) 
+length(UFC$constant_1[UFC$R_odds < 0]) # 2354 matchups had the "red corner" fighter projected as the favorite (i.e. the prospective winner)
+
+# Creating a variable to identify likely MMA pick for an analyst based solely on betting odds. 
+
+UFC = UFC %>% 
+  mutate(
+  analyst_pick = as.factor(ifelse(R_odds > 0, "underdog", ifelse(R_odds < 0, "favorite", NA)))) %>% 
+  mutate(
+  analyst_pick = relevel(analyst_pick, ref = "underdog")  
+  )
+
+# Create a training/testing data split 
+
+set.seed(1234) 
+
+indexing = createDataPartition(UFC$Winner, p = 0.75, list = F)
+
+training_set = UFC[indexing, ]
+testing_set = UFC[-indexing, ]
+
+# Looking good so far...let's see how good this basic metric looks in predicting correct outcomes
+
+table_baseline = table(testing_set$Winner, testing_set$analyst_pick)
+accuracy_baseline = sum(diag(table_baseline))/sum(table_baseline)
+accuracy_baseline = round(accuracy_baseline * 100, 3)
+accuracy_baseline
+
+```
+# Creating a data set that contains non-corner specific variables 
+
+```{r}
+
+training_dif.only = training_set %>% 
+  select(Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+  
+testing_dif.only = testing_set %>% 
+  select(
+    Winner, finish_details, total_fight_time_secs, rank_dif, weight_class, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+  ) %>% 
+  mutate(
+    Winner = relevel(Winner, ref = "Blue"),
+    finish_details = relevel(finish_details, ref = "Decision"),
+    gender = relevel(gender, ref = "MALE"),
+    stance_comparison = relevel(stance_comparison, ref = "Same")
+  )
+
+
+```
+
+# Part 1 of k-NN modelling: Pre-processing data 
+
+```{r}
+
+
+normalize = function(x) {
+  return((x - min(x))/(max(x) - min(x)))
+}
+
+training_for_knn.pt_1 = training_dif.only %>%
+  mutate(
+    total_fight_time_secs = normalize(total_fight_time_secs), 
+    rank_dif = normalize(rank_dif), 
+    ev_dif = normalize(ev_dif), 
+    win_dif = normalize(win_dif), 
+    win_streak_dif = normalize(win_streak_dif), 
+    longest_win_streak_dif = normalize(longest_win_streak_dif), 
+    draw_dif = normalize(draw_dif), 
+    loss_dif = normalize(loss_dif), 
+    lose_streak_dif = normalize(lose_streak_dif),
+    KO.TKO.Doctor_Stoppage_win_dif = normalize(KO.TKO.Doctor_Stoppage_win_dif),
+    sub_win_dif = normalize(sub_win_dif), 
+    dec_dif = normalize(dec_dif), 
+    age_dif = normalize(age_dif), 
+    height_dif = normalize(height_dif),
+    reach_dif = normalize(reach_dif), 
+    sig_str_dif = normalize(sig_str_dif), 
+    avg_str_pct = normalize(avg_str_pct), 
+    avg_td_dif = normalize(avg_td_dif), 
+    avg_td_pct = normalize(avg_td_pct),
+    avg_sub_att_dif = normalize(avg_sub_att_dif), 
+    total_round_dif = normalize(total_round_dif), 
+    total_title_bout_dif = normalize(total_title_bout_dif)
+  ) %>% 
+  mutate(
+    punch_elbow_slam = ifelse(finish_details == "Punch/Elbow/Slam", 1, 0),
+    kick_knee = ifelse(finish_details == "Kick/Knee", 1, 0), 
+    choke = ifelse(finish_details == "Choke", 1, 0), 
+    decision = ifelse(finish_details == "Decision", 1, 0),
+    lowerbody = ifelse(finish_details == "Lowerbody Joint Lock", 1, 0), 
+    upperbody = ifelse(finish_details == "Upperbody Joint Lock", 1, 0), 
+    heavyweight = ifelse(weight_class == "Heavyweight", 1, 0),
+    light.heavyweight = ifelse(weight_class == "Light Heavyweight", 1, 0), 
+    middleweight = ifelse(weight_class == "Middleweight", 1, 0), 
+    welterweight = ifelse(weight_class == "Welterweight", 1, 0), 
+    lightweight = ifelse(weight_class == "Lightweight", 1, 0), 
+    featherweight = ifelse(weight_class == "Featherweight", 1, 0), 
+    bantamweight = ifelse(weight_class == "Bantamweight", 1, 0), 
+    flyweight = ifelse(weight_class == "Flyweight", 1, 0), 
+    women_featherweight = ifelse(weight_class == "Women's Featherweight", 1, 0), 
+    women_bantamweight = ifelse(weight_class == "Women's Bantamweight", 1, 0), 
+    women_flyweight = ifelse(weight_class == "Women's Flyweight", 1, 0), 
+    women_strawweight = ifelse(weight_class == "Women's Strawweight", 1, 0), 
+    gender = ifelse(gender == "MALE", 1, 0), 
+    is_foreign = ifelse(is_foreign == TRUE, 1, 0), 
+    title_bout = ifelse(title_bout == TRUE, 1, 0), 
+    stance_comparison = ifelse(stance_comparison == "Same", 0, 1)
+  )
+
+training_for_knn = training_for_knn.pt_1 %>% 
+  dplyr::select(Winner, punch_elbow_slam, kick_knee, choke, lowerbody, upperbody, decision, total_fight_time_secs, heavyweight, light.heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, women_flyweight, women_strawweight, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif)
+
+
+testing_for_knn.pt_1 = testing_dif.only %>%
+  mutate(
+    total_fight_time_secs = normalize(total_fight_time_secs), 
+    rank_dif = normalize(rank_dif), 
+    ev_dif = normalize(ev_dif), 
+    win_dif = normalize(win_dif), 
+    win_streak_dif = normalize(win_streak_dif), 
+    longest_win_streak_dif = normalize(longest_win_streak_dif), 
+    draw_dif = normalize(draw_dif), 
+    loss_dif = normalize(loss_dif), 
+    lose_streak_dif = normalize(lose_streak_dif),
+    KO.TKO.Doctor_Stoppage_win_dif = normalize(KO.TKO.Doctor_Stoppage_win_dif),
+    sub_win_dif = normalize(sub_win_dif), 
+    dec_dif = normalize(dec_dif), 
+    age_dif = normalize(age_dif), 
+    height_dif = normalize(height_dif),
+    reach_dif = normalize(reach_dif), 
+    sig_str_dif = normalize(sig_str_dif), 
+    avg_str_pct = normalize(avg_str_pct), 
+    avg_td_dif = normalize(avg_td_dif), 
+    avg_td_pct = normalize(avg_td_pct),
+    avg_sub_att_dif = normalize(avg_sub_att_dif), 
+    total_round_dif = normalize(total_round_dif), 
+    total_title_bout_dif = normalize(total_title_bout_dif)
+  ) %>% 
+  mutate(
+    punch_elbow_slam = ifelse(finish_details == "Punch/Elbow/Slam", 1, 0),
+    kick_knee = ifelse(finish_details == "Kick/Knee", 1, 0), 
+    choke = ifelse(finish_details == "Choke", 1, 0), 
+    decision = ifelse(finish_details == "Decision", 1, 0),
+    lowerbody = ifelse(finish_details == "Lowerbody Joint Lock", 1, 0), 
+    upperbody = ifelse(finish_details == "Upperbody Joint Lock", 1, 0), 
+    heavyweight = ifelse(weight_class == "Heavyweight", 1, 0),
+    light.heavyweight = ifelse(weight_class == "Light Heavyweight", 1, 0), 
+    middleweight = ifelse(weight_class == "Middleweight", 1, 0), 
+    welterweight = ifelse(weight_class == "Welterweight", 1, 0), 
+    lightweight = ifelse(weight_class == "Lightweight", 1, 0), 
+    featherweight = ifelse(weight_class == "Featherweight", 1, 0), 
+    bantamweight = ifelse(weight_class == "Bantamweight", 1, 0), 
+    flyweight = ifelse(weight_class == "Flyweight", 1, 0), 
+    women_featherweight = ifelse(weight_class == "Women's Featherweight", 1, 0), 
+    women_bantamweight = ifelse(weight_class == "Women's Bantamweight", 1, 0), 
+    women_flyweight = ifelse(weight_class == "Women's Flyweight", 1, 0), 
+    women_strawweight = ifelse(weight_class == "Women's Strawweight", 1, 0), 
+    gender = ifelse(gender == "MALE", 1, 0), 
+    is_foreign = ifelse(is_foreign == TRUE, 1, 0), 
+    title_bout = ifelse(title_bout == TRUE, 1, 0), 
+    stance_comparison = ifelse(stance_comparison == "Same", 0, 1)
+  )
+
+testing_for_knn = testing_for_knn.pt_1 %>% 
+  dplyr::select(Winner, punch_elbow_slam, kick_knee, choke, lowerbody, upperbody, decision, total_fight_time_secs, heavyweight, light.heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, women_flyweight, women_strawweight, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif)
+
+```
+
+# Part 2 of k-NN Modeling: Make a basic model 
+
+```{r}
+
+set.seed(1234)
+
+proposed_k_value = round(sqrt(nrow(training_for_knn)), 0)
+training_knn_cl = training_for_knn[, 1]
+testing_knn_cl = testing_for_knn[, 1]
+
+KNN.basic.performance = expand.grid(
+  "k.value" = c(proposed_k_value, proposed_k_value+1), 
+  "model.accuracy" = 0
+)
+
+
+for (i in 1:length(KNN.basic.performance)) {
+  
+  set.seed(1234)
+  
+  KNN_model = knn(train = training_for_knn[, -1], 
+                  test = testing_for_knn[, -1], 
+                  cl = training_knn_cl,
+                  k = KNN.basic.performance$k.value[i])
+  
+  accuracy = sum(KNN_model == testing_knn_cl) / NROW(testing_knn_cl)
+  accuracy = round(accuracy*100, 3)
+  KNN.basic.performance$model.accuracy[i] = accuracy
+  
+}
+
+if (KNN.basic.performance$model.accuracy[1] > KNN.basic.performance$model.accuracy[2]) {
+  print(c("Best proposed K-Value for basic model is ", KNN.basic.performance$k.value[1], "with an accuracy of ", KNN.basic.performance$model.accuracy[1], "%"))
+} else {
+  print(c("Best proposed K-Value for basic model is ", KNN.basic.performance$k.value[2], "with an accuracy of ", KNN.basic.performance$model.accuracy[2], "%"))
+}
+
+
+
+
+```
+# Part 3 of k-NN modeling: After finding the optimal K-value 
+
+```{r}
+
+knn.opt = 1
+
+kNN.accuracy = expand.grid(
+  "K.value" = seq(1, 499, 1), 
+  "accuracy_score" = 0
+)
+
+for (i in 1:499) {
+  
+  set.seed(1234)
+  
+  knn.mod = knn(train = training_for_knn[, -1], 
+            test = testing_for_knn[, -1], 
+            cl = training_knn_cl, 
+            k = i)
+  
+  knn.opt[i] = 100 * sum(knn.mod == testing_knn_cl) / NROW(testing_knn_cl)
+  
+  k = i
+  
+  cat(k, "=", knn.opt[i], "")
+  
+  kNN.accuracy$accuracy_score[i] = knn.opt[i]
+}
+
+plot(knn.opt, type = "b", xlab ="K-value", ylab = "Accuracy")
+
+kNN.accuracy = kNN.accuracy %>% arrange(desc(accuracy_score))
+
+accuracy_KNN_opt = round(max(knn.opt), 3)
+accuracy_KNN_opt
+
+
+```
+
+# Logistic Regression: Selecting all relevant variables
+
+```{r}
+
+relevant_training_data =  training_dif.only %>% select(-weight_class, -gender, -is_foreign, -empty_arena) 
+
+log.reg_all = glm(Winner ~ ., data = relevant_training_data, family = binomial(link = "logit"))
+
+pred_log.reg_all = ifelse(predict(log.reg_all, testing_dif.only, type = "response") > 0.5, "Red", "Blue")
+accuracy_log.reg_all = round(mean(pred_log.reg_all == testing_dif.only$Winner)*100, 3)
+accuracy_log.reg_all
+
+```
+
+# Logistic Regression: Selecting all Correlates 
+
+```{r}
+
+log.reg_cor = glm(Winner ~ ev_dif + win_streak_dif + loss_dif + lose_streak_dif + age_dif + reach_dif + sig_str_dif + avg_str_pct + avg_td_dif + avg_td_pct, 
+                  data = training_dif.only, family = binomial(link = "logit"))
+
+pred_log.reg_cor = ifelse(predict(log.reg_cor, testing_dif.only, type = "response") > 0.5, "Red", "Blue")
+accuracy_log.reg_cor = round(mean(pred_log.reg_cor == testing_dif.only$Winner)*100, 3)
+accuracy_log.reg_cor
+
+```
+
+# Logistic Regression: Stepwise Regression 
+
+```{r}
+
+set.seed(1234)
+
+start_model = glm(Winner ~ 1, data = training_dif.only, family = binomial(link = "logit"))
+all_model = glm(Winner ~ ., data = training_dif.only, family = binomial(link = "logit"))
+
+retention = MASS::stepAIC(start_model, direction = 'both', scope = formula(all_model))
+ 
+
+log.reg_step = glm(retention$formula, data = training_dif.only, family = binomial(link = "logit"))
+
+accuracy_log.reg_step = round(mean(ifelse(predict(log.reg_step, testing_dif.only, type = "response") > 0.5, "Red", "Blue") == testing_dif.only$Winner)*100, 3)
+accuracy_log.reg_step
+
+```
+
+# Logistic Regression: Significant Differences Only 
+
+```{r}
+
+
+t.test(training_dif.only$total_fight_time_secs ~ training_dif.only$Winner)$p.value
+chisq.test(training_dif.only$Winner, training_dif.only$gender, correct = T)$p.value
+
+
+holder = as.data.frame(cbind('variables' = colnames(training_dif.only), 'p-value' = 0))
+
+  
+for(i in 1:length(training_dif.only)) {
+    
+    if(class(training_dif.only[, i]) == "integer") {
+      
+      sig.test = t.test(training_dif.only[, i] ~ training_dif.only$Winner) 
+      holder$`p-value`[i] = sig.test$p.value
+      
+    } else if (class(training_dif.only[, i]) == "numeric") {
+      
+      sig.test = t.test(training_dif.only[, i] ~ training_dif.only$Winner)
+      holder$`p-value`[i] = sig.test$p.value
+      
+    } else if (class(training_dif.only[, i]) == "factor")  {
+      
+      sig.test = chisq.test(training_dif.only$Winner, training_dif.only[, i], correct = T)
+      holder$`p-value`[i] = sig.test$p.value
+    } else if (class(training_dif.only[, i]) == "logical") {
+      
+      sig.test = chisq.test(training_dif.only$Winner, training_dif.only[, i], correct = T)
+      holder$`p-value`[i] = sig.test$p.value
+    }
+    
+}
+  
+
+significantly_different_variables = holder %>% filter(`p-value` < 0.05 & variables != "Winner") %>% arrange(`p-value`)
+significantly_different_variables$variables
+
+log_reg.association = glm(Winner ~ ev_dif + age_dif + win_streak_dif + loss_dif + reach_dif + avg_td_dif + finish_details + rank_dif + lose_streak_dif + sig_str_dif + height_dif + avg_td_pct + total_round_dif + title_bout + longest_win_streak_dif + empty_arena + KO.TKO.Doctor_Stoppage_win_dif, data = training_dif.only, family = binomial(link = "logit"))
+
+accuracy_log.reg_association = round(mean(ifelse(predict(log_reg.association, testing_dif.only, type = "response") > 0.5, "Red", "Blue") == testing_dif.only$Winner)*100, 3)
+
+accuracy_log.reg_association
+
+```
+
+# Decision Tree, part 1: Basic Model 
+
+```{r}
+
+set.seed(1234)
+
+decision.tree_basic = rpart(Winner ~., 
+                            data = training_dif.only, 
+                            method = 'class', 
+                            parms = list(split = "gini"),
+                            control = rpart.control(minsplit = 20, 
+                                          minbucket = round(20/3), 
+                                          cp = 0.01, 
+                                          maxcompete = 4, 
+                                          maxsurrogate = 5, 
+                                          usesurrogate = 2, 
+                                          xval = 10, 
+                                          surrogatestyle = 0,
+                                          maxdepth = 30))
+
+rpart.plot::rpart.plot(decision.tree_basic, fallen.leaves = T, digits = 3)
+
+accuracy_rpart_baseline = round(mean(predict(decision.tree_basic, testing_dif.only, type = "class") == testing_dif.only$Winner)*100, 3)
+accuracy_rpart_baseline
+
+```
+
+# Decision Tree, part 2: finding the best parameters 
+
+```{r}
+
+rpart_control = expand.grid(
+  minsplit = seq(10, 40, 5), 
+  minbucket = seq(3, 10, 1),
+  cp = c(0.001, 0.003, 0.005, 0.01, 0.03, 0.05, 0.1),
+  maxdepth = 30, 
+  xerror = 0
+)
+
+
+for (i in 1:nrow(rpart_control)) {
+  
+  set.seed(1234)
+  
+  model = rpart(Winner ~., 
+                data = training_dif.only, 
+                method = "class", 
+                parms = list(split = "gini"),
+                control = rpart.control(minsplit = rpart_control$minsplit[i],
+                                        minbucket = rpart_control$minbucket[i],
+                                        maxdepth = rpart_control$maxdepth[i], 
+                                        cp = rpart_control$cp[i]))
+  
+  rpart_control$xerror[i] = min(model$cptable[, 4]) 
+  
+}
+
+decision_tree.best_parameters = rpart_control %>% arrange(xerror) %>% slice_min(xerror, n = 1)
+decision_tree.best_parameters
+
+```
+
+# Decision Tree, part 3: Making predictions with best model 
+
+```{r}
+
+for (i in 1:nrow(decision_tree.best_parameters)) {
+  
+  
+  set.seed(1234)
+  
+  model = rpart(Winner ~., 
+                data = training_dif.only, 
+                method = "class", 
+                parms = list(split = "gini"),
+                control = rpart.control(minsplit = decision_tree.best_parameters$minsplit[i],
+                                        minbucket = decision_tree.best_parameters$minbucket[i],
+                                        maxdepth =  decision_tree.best_parameters$maxdepth[i],
+                                        cp = decision_tree.best_parameters$cp[i]))
+  
+  
+  accuracy = round(mean(predict(model, testing_dif.only, type = "class") == testing_dif.only$Winner) * 100, 3)
+  decision_tree.best_parameters$accuracy[i] = accuracy
+  
+}
+
+accuracy_decision.tree.tuned = max(decision_tree.best_parameters$accuracy)
+accuracy_decision.tree.tuned
+
+```
+
+# Random Forest Model, part 1: Make Basic Model to Test
+
+```{r}
+
+set.seed(1234)
+rf_basic = ranger(Winner ~., data = training_dif.only, num.trees = 1500, mtry = NULL, importance = "impurity", min.node.size = 1, probability = F)
+pred_rf.basic = predict(rf_basic, testing_dif.only, type = "response")$predictions
+accuracy_rf_basic = round(mean(pred_rf.basic == testing_dif.only$Winner)*100, 3)
+accuracy_rf_basic
+
+```
+# Random Forest Model, part 2: Hyperparameter Tuning & making optimized model
+
+```{r}
+
+rf.hyper_grid = expand.grid(
+  mtry = seq(1, 10, by = 1), 
+  min.node.size = seq(1, 20, by = 1), 
+  splitrule = "gini",
+  accuracy_score = 0
+)
+
+
+for (i in 1:nrow(rf.hyper_grid)) {
+  
+  # train model 
+  set.seed(1234)
+  model = ranger(Winner ~., 
+                 data = training_dif.only, 
+                 num.trees = 1500, 
+                 mtry = rf.hyper_grid$mtry[i],
+                 importance = "impurity",
+                 min.node.size = rf.hyper_grid$min.node.size[i], 
+                 splitrule = "gini")
+  
+  pred_model = predict(model, testing_dif.only, type = "response")$predictions
+  accuracy = round(mean(pred_model == testing_dif.only$Winner)*100, 3)
+  rf.hyper_grid$accuracy_score[i] = accuracy
+}
+
+best_rf_parameters = rf.hyper_grid %>% arrange(desc(accuracy_score)) %>% top_n(1)
+
+
+set.seed(1234)
+
+rf_best.tuned = ranger(Winner ~., 
+                       data = training_dif.only, 
+                       num.trees = 1500, 
+                       mtry = best_rf_parameters$mtry,
+                       importance = 'impurity', 
+                       min.node.size = best_rf_parameters$min.node.size, 
+                       splitrule = "gini")
+
+var.important = as.vector(round(rf_best.tuned$variable.importance, 3))
+var.names = as.vector(names(training_dif.only)[-1])
+DF.ranger_model = as.data.frame(cbind(var.names, var.important))
+DF.ranger_model
+
+DF.ranger_model %>% 
+  mutate(
+    var.important = as.numeric(var.important)
+  ) %>% 
+  arrange(desc(var.important)) %>% 
+  top_n(15) %>% 
+  ggplot(
+    aes(x = reorder(var.names, var.important), y = var.important, fill = var.important)
+    ) +
+  geom_bar(
+    stat = 'identity', position = 'dodge'
+  ) +
+  theme_classic() + 
+  theme(
+    axis.text.x = element_text(color = 'black', angle = 90, hjust = 1),
+    axis.text = element_text(color = 'black')
+  ) +
+  labs(x = "Important variables") + 
+  coord_flip() 
+
+
+accuracy_rf.tuned = round(mean(predict(rf_best.tuned, testing_dif.only)$prediction == testing_dif.only$Winner)*100, 3)
+accuracy_rf.tuned
+
+
+```
+
+# XGBoost, Part 1: Pre-processing the data 
+
+```{r}
+
+set.seed(1234)
+
+training_for_xgboost = training_dif.only
+testing_for_xgboost = testing_dif.only
+
+# Step 1: Pre-Process
+
+training_for_xgboost = training_for_xgboost %>% 
+  mutate(
+    punch_elbow_slam = ifelse(finish_details == "Punch/Elbow/Slam", 1, 0),
+    kick_knee = ifelse(finish_details == "Kick/Knee", 1, 0), 
+    choke = ifelse(finish_details == "Choke", 1, 0), 
+    decision = ifelse(finish_details == "Decision", 1, 0),
+    lowerbody = ifelse(finish_details == "Lowerbody Joint Lock", 1, 0), 
+    upperbody = ifelse(finish_details == "Upperbody Joint Lock", 1, 0), 
+    heavyweight = ifelse(weight_class == "Heavyweight", 1, 0),
+    light.heavyweight = ifelse(weight_class == "Light Heavyweight", 1, 0), 
+    middleweight = ifelse(weight_class == "Middleweight", 1, 0), 
+    welterweight = ifelse(weight_class == "Welterweight", 1, 0), 
+    lightweight = ifelse(weight_class == "Lightweight", 1, 0), 
+    featherweight = ifelse(weight_class == "Featherweight", 1, 0), 
+    bantamweight = ifelse(weight_class == "Bantamweight", 1, 0), 
+    flyweight = ifelse(weight_class == "Flyweight", 1, 0), 
+    women_featherweight = ifelse(weight_class == "Women's Featherweight", 1, 0), 
+    women_bantamweight = ifelse(weight_class == "Women's Bantamweight", 1, 0), 
+    women_flyweight = ifelse(weight_class == "Women's Flyweight", 1, 0), 
+    women_strawweight = ifelse(weight_class == "Women's Strawweight", 1, 0), 
+    gender = ifelse(gender == "MALE", 1, 0), 
+    is_foreign = ifelse(is_foreign == TRUE, 1, 0), 
+    title_bout = ifelse(title_bout == TRUE, 1, 0), 
+    stance_comparison = ifelse(stance_comparison == "Same", 0, 1)
+  ) %>% 
+  mutate(
+    is_foreign = as.numeric(ifelse(is_foreign == TRUE, 1, 0)),
+    title_bout = as.numeric(ifelse(title_bout == TRUE, 1, 0))
+  )
+
+testing_for_xgboost = testing_for_xgboost %>% 
+  mutate(
+    punch_elbow_slam = ifelse(finish_details == "Punch/Elbow/Slam", 1, 0),
+    kick_knee = ifelse(finish_details == "Kick/Knee", 1, 0), 
+    choke = ifelse(finish_details == "Choke", 1, 0), 
+    decision = ifelse(finish_details == "Decision", 1, 0),
+    lowerbody = ifelse(finish_details == "Lowerbody Joint Lock", 1, 0), 
+    upperbody = ifelse(finish_details == "Upperbody Joint Lock", 1, 0), 
+    heavyweight = ifelse(weight_class == "Heavyweight", 1, 0),
+    light.heavyweight = ifelse(weight_class == "Light Heavyweight", 1, 0), 
+    middleweight = ifelse(weight_class == "Middleweight", 1, 0), 
+    welterweight = ifelse(weight_class == "Welterweight", 1, 0), 
+    lightweight = ifelse(weight_class == "Lightweight", 1, 0), 
+    featherweight = ifelse(weight_class == "Featherweight", 1, 0), 
+    bantamweight = ifelse(weight_class == "Bantamweight", 1, 0), 
+    flyweight = ifelse(weight_class == "Flyweight", 1, 0), 
+    women_featherweight = ifelse(weight_class == "Women's Featherweight", 1, 0), 
+    women_bantamweight = ifelse(weight_class == "Women's Bantamweight", 1, 0), 
+    women_flyweight = ifelse(weight_class == "Women's Flyweight", 1, 0), 
+    women_strawweight = ifelse(weight_class == "Women's Strawweight", 1, 0), 
+    gender = ifelse(gender == "MALE", 1, 0), 
+    is_foreign = ifelse(is_foreign == TRUE, 1, 0), 
+    title_bout = ifelse(title_bout == TRUE, 1, 0), 
+    stance_comparison = ifelse(stance_comparison == "Same", 0, 1)
+  ) %>% 
+  mutate(
+    is_foreign = as.numeric(ifelse(is_foreign == TRUE, 1, 0)),
+    title_bout = as.numeric(ifelse(title_bout == TRUE, 1, 0))
+  )
+
+
+training_for_xgboost = training_for_xgboost %>% 
+  dplyr::select(
+    Winner, punch_elbow_slam, kick_knee, choke, lowerbody, upperbody, decision, total_fight_time_secs, heavyweight, light.heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, women_flyweight, women_strawweight, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+    )
+
+
+testing_for_xgboost = testing_for_xgboost %>% 
+  dplyr::select(
+    Winner, punch_elbow_slam, kick_knee, choke, lowerbody, upperbody, decision, total_fight_time_secs, heavyweight, light.heavyweight, middleweight, welterweight, lightweight, featherweight, bantamweight, flyweight, women_featherweight, women_bantamweight, women_flyweight, women_strawweight, gender, is_foreign, title_bout, empty_arena, ev_dif, win_dif, win_streak_dif, longest_win_streak_dif, draw_dif, loss_dif, lose_streak_dif, KO.TKO.Doctor_Stoppage_win_dif, sub_win_dif, dec_dif, age_dif, height_dif, reach_dif, stance_comparison, sig_str_dif, avg_str_pct, avg_td_dif, avg_td_pct, avg_sub_att_dif, total_round_dif, total_title_bout_dif
+    )
+
+xgb_training = as.matrix(training_for_xgboost %>% dplyr::select(- Winner))
+xgb_testing = as.matrix(testing_for_xgboost %>% dplyr::select(- Winner))
+
+training_label = training_for_xgboost$Winner
+testing_label = testing_for_xgboost$Winner
+
+```
+
+# XGBoost in part 2: Make the basic model 
+
+```{r}
+
+xgb_trcontrol = trainControl(
+  method = "repeatedcv", 
+  number = 3,
+  repeats = 5,
+  allowParallel = T, 
+  classProbs = T,
+  summaryFunction = twoClassSummary
+)
+
+xgb.grid.basic = expand.grid(
+  eta = 0.1, 
+  gamma = 0, 
+  max_depth = 6, 
+  min_child_weight = 1, 
+  subsample = 1, 
+  colsample_bytree = 1,
+  nrounds = 500
+)
+
+set.seed(1234)
+
+xgb_model.basic = caret::train(x = xgb_training, 
+                        y = training_label,
+                        trControl = xgb_trcontrol, 
+                        method = "xgbTree",
+                        metric = "ROC",
+                        tuneGrid = xgb.grid.basic
+                        )
+
+pred_xgb.basic = predict(xgb_model.basic, xgb_testing)
+accuracy_xgboost.basic = round(mean(pred_xgb.basic == testing_label)*100, 3)
+accuracy_xgboost.basic
+
+```
+# XGBoost in part 3: Parameter Tuning
+
+```{r}
+
+set.seed(1234)
+
+xgb.grid.1 = expand.grid(
+  eta = c(0.001, 0.005, 0.01, 0.05, 0.1, 0.3, 0.5, 1),
+  gamma = 0, 
+  max_depth = 6, 
+  min_child_weight = 1, 
+  subsample = 1, 
+  colsample_bytree = 1,
+  nrounds = 500
+)
+
+
+xgb_model.A = caret::train(x = xgb_training, 
+                           y = training_label,
+                           trControl = xgb_trcontrol, 
+                           method = "xgbTree",
+                           metric = "ROC",
+                           tuneGrid = xgb.grid.1
+                        )
+
+xgb_model.A$bestTune
+xgb_model.A$results
+
+accuracy_xgboost.part_a = round(mean(predict(xgb_model.A, xgb_testing) == testing_label)*100, 3)
+accuracy_xgboost.part_a
+
+#########################
+
+no_cores = detectCores() - 1 # Find out the number of CPU processors you have in your device and use 1 less so as to avoid having R crash 
+cl = makePSOCKcluster(no_cores)
+registerDoParallel(cl)
+
+#########################
+
+xgb.grid.2 = expand.grid(
+  eta = 0.005, 
+  gamma = 0,
+  max_depth = seq(3, 10, by = 1), 
+  min_child_weight = seq(1, 10, by = 1), 
+  subsample = seq(0.4, 1, by = 0.1),
+  colsample_bytree = 1, 
+  nrounds = 100
+)
+
+set.seed(1234)
+
+xgb_model.B = caret::train(x= xgb_training, 
+                           y = training_label,
+                           trControl = xgb_trcontrol,
+                           method = "xgbTree", 
+                           metric = "ROC", 
+                           tuneGrid = xgb.grid.2, 
+                           allowParallel = T)
+
+xgb_model.B$bestTune
+xgb_model.B$results
+
+accuracy_xgboost.part_b = round(mean(predict(xgb_model.B, xgb_testing) == testing_label)*100, 3)
+accuracy_xgboost.part_b
+
+##########################
+
+xgb.grid.3 = expand.grid(
+  eta = 0.005, 
+  gamma = seq(0, 8, 1),
+  max_depth = 5, 
+  min_child_weight = 8, 
+  subsample = 0.4,
+  colsample_bytree = seq(0.4, 1, 0.1), 
+  nrounds = 500
+)
+
+set.seed(1234)
+
+xgb_model.C = caret::train(x= xgb_training, 
+                           y = training_label,
+                           trControl = xgb_trcontrol,
+                           method = "xgbTree", 
+                           metric = "ROC", 
+                           tuneGrid = xgb.grid.3, 
+                           allowParallel = T)
+
+xgb_model.C$bestTune
+xgb_model.C$results
+
+accuracy_xgboost.part_c = round(mean(predict(xgb_model.C, xgb_testing) == testing_label)*100, 3)
+accuracy_xgboost.part_c
+
+```
+
+# XGBoost in part 4: Finalized Model
+
+```{r}
+
+set.seed(1234)
+
+xgb.grid.tuned = expand.grid(
+  eta = 0.005, 
+  gamma =7,
+  max_depth = 5, 
+  min_child_weight = 8, 
+  subsample = 0.4,
+  colsample_bytree = 0.6, 
+  nrounds = 500
+)
+
+xgb_trcontrol = trainControl(
+  method = "repeatedcv", 
+  number = 3,
+  repeats = 5,
+  allowParallel = T, 
+  classProbs = T,
+  summaryFunction = twoClassSummary
+)
+
+xgb_model.best = caret::train(x = xgb_training, 
+                              y = training_label, 
+                              trControl = xgb_trcontrol, 
+                              method = "xgbTree", 
+                              metric = "ROC", 
+                              tuneGrid = xgb.grid.tuned, 
+                              allowParallel = T)
+
+accuracy_xgboost.tuned = round(mean(predict(xgb_model.best, xgb_testing) == testing_label)*100, 3)
+accuracy_xgboost.tuned
+
+```
+# Recap on Model Performance 
+
+```{r}
+
+Recap = as.data.frame(rbind("Proposed Analyst Method" = accuracy_baseline,
+      "K-Nearest Neighbor" = accuracy_KNN_opt, 
+      "Logistic Regression - all relevant variables" = accuracy_log.reg_all,
+      "Logistic Regression - correlation filtering" = accuracy_log.reg_cor, 
+      "Logistic Regression - stepwise regression" = accuracy_log.reg_step, 
+      "Logistic Regression - significant differences only" = accuracy_log.reg_association, 
+      "Classification Trees" = accuracy_decision.tree.tuned, 
+      "Random Forest" = accuracy_rf_basic, 
+      "Extreme Gradient Boost" = accuracy_xgboost.tuned))
+
+Recap$Performance_Accuracy = Recap$V1
+Recap = Recap %>% arrange(desc(Performance_Accuracy))
+Recap # Logistic regression outperformed other supervised learning approaches as a whole 
+
+```
+
+# Evaluating with upcoming fights
+
+```{r}
+
+# Best two models are logistic regression models (a) significant differences + (b) correlates
+
+# recap: 
+
+log_reg.association$coefficients
+log.reg_cor$coefficients # since we're missing finish details, need to adjust for it
+
+log_reg.association_updated = glm(Winner ~ ev_dif + age_dif + win_streak_dif + loss_dif + reach_dif + avg_td_dif + rank_dif + lose_streak_dif + sig_str_dif + height_dif + avg_td_pct + total_round_dif + title_bout + longest_win_streak_dif + empty_arena + KO.TKO.Doctor_Stoppage_win_dif, data = training_dif.only, family = binomial(link = "logit"))
+
+accuracy_log.reg_association_updated = round(mean(ifelse(predict(log_reg.association_updated, testing_dif.only, type = "response") > 0.5, "Red", "Blue") == testing_dif.only$Winner)*100, 3)
+
+accuracy_log.reg_association_updated
+accuracy_log.reg_association
+
+# Looks like removing the finish details drops the performance of the model comapred to before...so we'll just go with the other model since it outperforms this adjusted model. 
+
+# Predictions: 
+
+prediction.UFC_258.log_reg_cor = ifelse(predict(log.reg_cor, UFC_258_clean, type = 'response') > 0.5, "Red", "Blue")
+
+UFC_258_clean = UFC_258_clean %>% mutate(analyst_pick = as.factor(ifelse(R_odds > 0, "underdog", ifelse(R_odds < 0, "favorite", NA)))) %>% mutate(analyst_pick = ifelse(analyst_pick=="favorite", "Red", "Blue"))
+
+Baseline_picks = UFC_258_clean$analyst_pick
+
+Actual_winners = c("Kamaru Usman", "Alexa Grasso", "Kelvin Gastelum", "Ricky Simon", "Julian Marquez", "Anthony Hernandez", "Belal Muhammad", "Polyana Viana", "Chris Gutierrez", "Gabe Green", "Cancelled")
+Actual_winners = as.data.frame(cbind(Actual_winners))
+
+
+
+Evaluation = as.data.frame(cbind("Model Predictions" = paste(prediction.UFC_258.log_reg_cor)))
+Evaluation = cbind("Red Corner" = UFC_258_clean$R_fighter, "Blue Corner"= UFC_258_clean$B_fighter, "Actual Winners" = Actual_winners, Evaluation, "Proposed Analyst Predictions" = Baseline_picks)
+Evaluation =  Evaluation[1:10,] # Accounting for cancelled fight 
+
+Evaluation = Evaluation %>% mutate(
+  
+  Outcomes = ifelse(c(Actual_winners == "Kamaru Usman" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Both", 
+             ifelse(c(Actual_winners == "Kamaru Usman" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "My Model",
+             ifelse(c(Actual_winners == "Kamaru Usman" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "Analyst",
+             ifelse(c(Actual_winners == "Kamaru Usman" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Neither",
+             ifelse(c(Actual_winners == "Alexa Grasso" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Both", 
+             ifelse(c(Actual_winners == "Alexa Grasso" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "My Model",
+             ifelse(c(Actual_winners == "Alexa Grasso" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "Analyst",
+             ifelse(c(Actual_winners == "Alexa Grasso" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Neither",
+             ifelse(c(Actual_winners == "Kelvin Gastelum" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Both", 
+             ifelse(c(Actual_winners == "Kelvin Gastelum" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "My Model",
+             ifelse(c(Actual_winners == "Kelvin Gastelum" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "Analyst",
+             ifelse(c(Actual_winners == "Kelvin Gastelum" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Neither",
+             ifelse(c(Actual_winners == "Ricky Simon" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Both", 
+             ifelse(c(Actual_winners == "Ricky Simon" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "My Model",
+             ifelse(c(Actual_winners == "Ricky Simon" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "Analyst",
+             ifelse(c(Actual_winners == "Ricky Simon" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Neither",
+             ifelse(c(Actual_winners == "Julian Marquez" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Both", 
+             ifelse(c(Actual_winners == "Julian Marquez" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "My Model",
+             ifelse(c(Actual_winners == "Julian Marquez" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "Analyst",
+             ifelse(c(Actual_winners == "Julian Marquez" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Neither",
+             ifelse(c(Actual_winners == "Anthony Hernandez" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Both", 
+             ifelse(c(Actual_winners == "Anthony Hernandez" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "My Model",
+             ifelse(c(Actual_winners == "Anthony Hernandez" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "Analyst",
+             ifelse(c(Actual_winners == "Anthony Hernandez" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Neither",
+             ifelse(c(Actual_winners == "Belal Muhammad" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Both", 
+             ifelse(c(Actual_winners == "Belal Muhammad" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "My Model",
+             ifelse(c(Actual_winners == "Belal Muhammad" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "Analyst",
+             ifelse(c(Actual_winners == "Belal Muhammad" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Neither",
+             ifelse(c(Actual_winners == "Polyana Viana" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Both", 
+             ifelse(c(Actual_winners == "Polyana Viana" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "My Model",
+             ifelse(c(Actual_winners == "Polyana Viana" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "Analyst",
+             ifelse(c(Actual_winners == "Polyana Viana" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Neither",
+             ifelse(c(Actual_winners == "Chris Gutierrez" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Both", 
+             ifelse(c(Actual_winners == "Chris Gutierrez" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "My Model",
+             ifelse(c(Actual_winners == "Chris Gutierrez" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "Analyst",
+             ifelse(c(Actual_winners == "Chris Gutierrez" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Neither",
+             ifelse(c(Actual_winners == "Gabe Green" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Red"), "Both", 
+             ifelse(c(Actual_winners == "Gabe Green" & `Model Predictions` == "Red" & `Proposed Analyst Predictions` == "Blue"), "My Model",
+             ifelse(c(Actual_winners == "Gabe Green" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Red"), "Analyst",
+             ifelse(c(Actual_winners == "Gabe Green" & `Model Predictions` == "Blue" & `Proposed Analyst Predictions` == "Blue"), "Neither", NA))))))))))))))))))))))))))))))))))))))))
+)
+
+Evaluation # Looks like my model did a better job than MMA Analysts. Shout out to ya Boi!!!
+
+```
+
+# Can I make money? 
+
+
+```{r}
+making.money = as.data.frame(cbind("Actual Winner" = Evaluation$Actual_winners, "My Picks" = Evaluation$`Model Predictions`, "Red Corner" = Evaluation$`Red Corner`, "Red Corner Payout" = round(UFC_258_clean$R_ev[1:10], 2), "Blue Corner" = Evaluation$`Blue Corner`, "Blue Corner Payout" = round(UFC_258_clean$B_ev[1:10], 2)))
+
+making.money
+
+
+```
+
+
+# Assume that I put $100 for every possible fight matchup on the card...
+
+```{r}
+
+payout = sum(35.97, 93.46, 48.78, 39.53, 56.5, 22.37, 100, 72.46)
+payout # $469.07 for $1000 risk 
+
+```
+
+
+While it's cool to put that out as a bet (like a 46.91% profit), it's not the most intelligent means of doing so. We want to be sure about this. 
+
+
+We'll be using this formula: 
+
+(Payout for a 100 dollar bet) * probabilty to win - (100 dollar wager) probability to lose = breaking even (i.e. it's zero)
+
+*if 1 = probability to win + probability to lose, then probability to lose = 1-probability to win
+
+(Payout for a 100 dollar bet) * probabilty to win - (100 dollar wager)(1 - probability to win) = 0 
+
+
+So using the Usman vs. Burn fight, if I were to choose Usman (-278), the formula looks like this:
+
+((100/278)x100) x p(win) - 100(1 - p(win)) = 0
+35.97p(Win) - 100 + 100p(Win) = 0 
+p(Win) = 100/135.97 ~ 73.55%.... so I need to have Kamaru Usman be favored to win at least 73.55% of the time in a model to make the Kamaru Usman bet to be profitable. 
+
+```{r}
+
+# Function to calculate the necessary probability that a fighter needs to make an actual bet. 
+
+prob_to_win = function(ev) {
+  
+  p_value = 100/(ev+100)
+  p_value = p_value * 100
+  p_value = round(p_value, 2)
+  return(p_value)
+}
+
+projected_winner_payouts = list(35.97, 93.48, 48.78, 39.53, 56.50, 20.53, 23.37, 100, 112, 72.46) # The payouts for my projected picks 
+min.prob.to.make.bet = unlist(lapply(projected_winner_payouts, prob_to_win))
+making.money = cbind(making.money, "Min probability to bet" = as.data.frame(cbind(min.prob.to.make.bet)))
+making.money$`probability to bet` = making.money[, 7]
+making.money
+
+```
+
+```{r}
+
+prob_pick.to.win = c(75.51, (100-47.55), 60.28, 72.14, (100-47.41), 82.68, 77.10, 54.18, 57.61, 51.56) # 
+
+picks = c("Kamaru Usman", "Alexa Grasso", "Kelvin Gastelum", "Ricky Simon", "Julian Marquez", "Roldofo Vieira", "Belal Muhammad", "Polyana Viana", "Andre Ewell", "Gabe Green")
+
+should_bet_or_not = as.data.frame(cbind("Actual Winner" = making.money$`Actual Winner`, "My picks" = picks, "Probability to win" = prob_pick.to.win, "Probability to bet" = making.money$`probability to bet`))
+
+should_bet_or_not = should_bet_or_not %>% mutate(
+    `Place bet` = as.factor(ifelse(`Probability to win` > `Probability to bet`, "Yes", "No")), 
+    `Wager payouts` = c(35.97, 93.46, 48.78, 39.53, 56.50, 20.53, 22.37, 100, 112, 72.46)
+    )
+
+should_bet_or_not
+
+
+```
+
+Looking at the data frame, it looks like if I were to place a $100 bet for each of the 5 bets for each of my model picks that had met the cutoff win probability criteria, I would have stood to have made 268.96 dollars, which is a 53.8% profit. Although I did miss out on the additional 200.11 dollars, it would have only netted a 40.02% profit if I placed 100 dollar bet each. 
+
+
+```{r, include = F, warning = F, message = F}
+
+on.exit(stopCluster(cl))
+
+```
+
