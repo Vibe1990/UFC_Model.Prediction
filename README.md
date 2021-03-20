@@ -26,5 +26,6 @@ Being an avid MMA fan, or anything really, there is a dichotomy that we are awar
 
 With these analysts being so hit-or-miss with these outcomes, I figured I could do a better job than them.  Now before I get labelled as a "*I know better because I trained ‘UFC’*" guy, I'll be doing so through a more data-driven process.  Specifically, I’ll be analyzing at what the data has to say between winners and losers from previous fights in the UFC and build some predictive models to see how accurate I can get with predicting Winners and I can do a better job at predicing outcomes.  Also, considering the nature of this project, let's see if I can actually make more money doing so from my machine learning models compared to just using betting lines. 
 
-
+---
 ***DISCLAIMER:*** Everything that is being used in this article is entirely for educational purposes and entertainment.  **DO NOT USE IT FOR THE PURPOSE OF GAMBLING OR FINANCIAL GAIN**.  You are way better off going with r/WallStreetBets on Reddit or investing in cryptocurrency than what’s shown here.  
+---
