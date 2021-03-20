@@ -43,7 +43,7 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 * With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), it was shown that the chosen approach of using a logistic regression model with variable selection using correlates outperformed the projected mma analysis (8 vs. 7). Under the assumption of wagering $100 per each fight match-up, the overall profit was $469.07 (~ 46.91% profit) using chosen model algorithm vs. $353.13 (~ 35.31% profit) using the proposed mma analyst picks. 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/Compare_model_picks_vs_analysis.PNG)
-
+![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/UFC_bet_payouts.PNG)
 
 ## Data Description 
 
@@ -120,7 +120,9 @@ The data consisted of data collected from the period of 2010-03-21 to 2021-02-10
 | R/B_pass_bout                                                   | average number of guard-passes in a bout                            |
 | R/B_rev_bout                                                    | average number of reversals (i.e., sweeps) in a bout                |
 
-**NOTE**: Values for the favorite is listed as a negative whilst the underdog is listed as a positive value.  This is noted with differential scores 
+**NOTE**: Values for the favorite is listed as a negative whilst the underdog is listed as a positive value.  This is noted with differential scores. 
+
+
 **NOTE**: Class ranking go from 0 (denoting champion) to 15. Blanks refer to unranked fighters 
 
 ## Technical Overview
