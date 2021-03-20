@@ -1,4 +1,4 @@
-# How a MMA fan who got tired of bad commentary built a predictive model that did a better job than MMA analysts.
+# How a fan who got tired of bad MMA commentary built a predictive model that did a better job than MMA analysts.
 
 This repository contains code and data used in demonstrating various supervised machine learning algorithms to predict fight outcomes in the largest mixed martial arts organization in the world, the [UFC](www.ufc.com), using the R language.  
 
@@ -40,8 +40,10 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/UFC_Outcome_Prediction_Recap.PNG)
 
-* With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), it was shown that the chosen approach of using a logistic regression model with variable selection using correlates outperformed the projected mma analysis.  
+* With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), it was shown that the chosen approach of using a logistic regression model with variable selection using correlates outperformed the projected mma analysis. Under the impression of wagering $100 per fight, overall profit was $469.07 (~ 46.91% profit). 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/Compare_model_picks_vs_analysis.PNG)
+
+* Using a 
 
 
