@@ -49,8 +49,82 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 
 The data consisted of data collected from the period of 2010-03-21 to 2021-02-10 that was scrapped from the UFC Stat site and made available on [Kaggle](https://www.kaggle.com/mdabbert/ultimate-ufc-dataset).  There are two data sets used in this project: 
 
-1) [Historical data]()
-2) 9Pre-fight data for UFC 258]()
+1) [Historical data](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/ufc-master.csv)
+2) [Pre-fight data for UFC 258](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/upcoming-event.csv)
+
+| **Variable**                                                    | **Description**                                                     |
+|-----------------------------------------------------------------|---------------------------------------------------------------------|
+| R_fighter                                                       | favorite fighter in match up                                        |
+| B_fighter                                                       | underdog fighter in match up                                        |
+| date                                                            | when the fight took place                                           |
+| location                                                        | city where the fight took place                                     |
+| country                                                         | country where the fight took place                                  |
+| winner                                                          | which fighter won the fight                                         |
+| weight_class                                                    | weight class where the fight took place in                          |
+| gender                                                          | gender of the fighters                                              |
+| R/B_Stance                                                      | fight stance of the underdog/favorite fighter                       |
+| finish                                                          | how did the fight end                                               |
+| finish_details                                                  | specifically how did the fight end                                  |
+| finish_round_time                                               | time in the round when the fight ended                              |
+| title_bout                                                      | was the fight a title bout                                          |
+| R/B_odds                                                        | betting odds of the favorite/underdog                               |
+| R/B_ev                                                          | payout for favorite/underdog win                                    |
+| no_of_rounds                                                    | number of rounds for the fight                                      |
+| R/B_current_lose_streak                                         | number of consecutive losses at time of fight                       |
+| R/B_current_win_streak                                          | number of consecutive wins at time of fight                         |
+| R/B_draw                                                        | total number of draw up until time of fight                         |
+| R/B_losses                                                      | total number of losses up until time of fight                       |
+| R/B_wins                                                        | total number of wins up until time of fight                         |
+| R/B_longest_win_streak                                          | longest win streak in career up until time of fight                 |
+| R/B_avg_SIG_STR_landed                                          | average number of significant strikes landed per minute             |
+| R/B_avg_SIG_STR_pct                                             | accuracy of significant strikes landed vs thrown                    |
+| R/B_avg_SUB_ATT                                                 | average number of submission attempts in a fight                    |
+| R/B_avg_TD_landed                                               | average number of takedowns landed per minute                       |
+| R/B_avg_TD_pct                                                  | accuracy of takedown landed vs attempted                            |
+| R/B_Height_cms                                                  | height of respective fighter in match up                            |
+| R/B_Reach_cms                                                   | reach of respective fighter in match up                             |
+| R/B_weight_lbs                                                  | weight of respective fighter in match up                            |
+| R/B_age                                                         | age of respective fighter in match up                               |
+| R/B_total_title_bouts                                           | total number of in career up until the time of fight                |
+| R/B_total_round_fought                                          | total number of rounds fought in the UFC up until fight             |
+| R/B_win_by_decision                                             | total number of wins respectively by decision                       |
+| R/B_win_by_submission                                           | total number of wins respectively by submission                     |
+| R/B_win_by_KO.TKO                                               | total number of wins respectively by knockout                       |
+| R/B_win_by_TKO_Doctor                                           | total number of wins respectively by doctor stoppage                |
+| win_dif                                                         | total win differential b/t respective fighter                       |
+| loss_dif                                                        | total loss differential b/t respective fighter                      |
+| lose_streak_dif                                                 | losing streak differential b/t respective fighter                   |
+| win_streak_dif                                                  | win streak differential b/t respective fighter                      |
+| longest_win_streak_dif                                          | longest win streak differential b/t respective fighter              |
+| total_round_dif                                                 | differential b/t respective fighter on total rounds fought          |
+| total_title_bout_dif                                            | differential b/t fighters on total title bouts fought               |
+| ko_dif                                                          | differential on total knockouts + doctor stoppage wins              |
+| sub_dif                                                         | differential on total submission wins                               |
+| sig_str_dif                                                     | differential on significant strikes landed                          |
+| avg_sub_att_dif                                                 | differential on average submission attempts                         |
+| avg_td_dif                                                      | differential on takedowns landed                                    |
+| empty_arena                                                     | was the fight held in an empty arena                                |
+| R/B_weightclass_rank                                            | weight class rank for respective fighter                            |
+| finish_round                                                    | which round did the fight end                                       |
+| total_fight_time_secs                                           | total length of fight in seconds                                    |
+| R/B_kd_bout                                                     | average number of knockdowns in a bout                              |
+| R/B_sig_str_landed_bout                                         | average number of significant strikes landed in a bout              |
+| R/B_sig_str_attempted_bout                                      | average number of significant strikes attempted in a bout           |
+| R/B_sig_str_pct_bout                                            | average accuracy of significant strikes landed in a bout            |
+| R/B_tot_str_landed_bout                                         | average total number of strikes landed in a bout                    |
+| R/B_tot_str_attempted_bout                                      | average total number of strikes attempted in a bout                 |
+| R/B_td_landed_bout                                              | average number of takedowns landed in a bout                        |
+| R/B_td_attempted_bout                                           | average number of takedowns attempted in a bout                     |
+| R/B_td_pct_bout                                                 | average accuracy of takedowns landed in a bout                      |
+| R/B_sub_attempts_bout                                           | average number of submissions attempted in a bout                   |
+| R/B_pass_bout                                                   | average number of guard-passes in a bout                            |
+| R/B_rev_bout                                                    | average number of reversals (i.e., sweeps) in a bout                |
+
+**NOTE**: Values for the favorite is listed as a negative whilst the underdog is listed as a positive value.  This is noted with differential scores 
+**NOTE**: Class ranking go from 0 (denoting champion) to 15. Blanks refer to unranked fighters 
+
+## Technical Overview
+
 
 
 
