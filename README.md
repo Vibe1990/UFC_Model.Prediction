@@ -1,17 +1,23 @@
-# I got tired of bad MMA commentary, so I built a predictive model that did a better job. 
+# How an MMA fan who got tired of bad commentary built a predictive model that did a better job than MMA analysts.
 
 This repository contains code and data used in demonstrating various supervised machine learning algorithms to predict fight outcomes in the largest mixed martial arts organization in the world, the [UFC](www.ufc.com), using the R language.  
 
 
 ## TABLE OF CONTENTS
 
-* Overview
+* Introduction
 * Results
 * Data Description
 * Technical Overview
 
-## Overview 
+## Introduction
 
-When I was growing up in the late 90's to early 2000's, everyone I knew had wanted to become a professional athlete in some form.  People like Kobe Bryant (R.I.P.), Brendan Shanahan, or Ronaldo were essentially superstars to all of us and we all had taken turns being them during pick-up games at the local park or on the street (in between the car passing by every 5-10 minutes).  While the idea of being like them was great and all, I kind of knew it wasn't really going to be in the cards being one of the smallest person in my class, can't skate backwards to save my life, and almost zero coordination with my feet with respect to the ball. However, despite being ready to complete close that aspiration, there was an emerging sport that had both captured my attention and gave me a glimmer of hope in pursuing a professional atheletic career.  That was mixed martial arts.  
+When I was growing up in the late 90's to early 2000's, everyone I knew had wanted to become a professional athlete in some form.  We all looked up to players like Kobe Bryant (R.I.P.), Brendan Shanahan, or Ronaldo.  To us, they were essentially gods personified, and we all had taken turns being like them during pick-up games at the local park or on the street in front of our homes (in between the car passing by every 5-10 minutes). 
 
-Mixed martial arts (or MMA) had everything I liked about sports: an array of technical skills and strategies to solve complex problems with dire consequences, a growing and passionate fandom, and be a platform to display a triumph of human will in the truest sense.  Ever since I saw it for the first time, I knew I had to give it a shot.  As I got older, I thought I had a shot after having wrestled in college and taking up some other necessary skills in the form of Muay Thai and Brazilian Jiu-Jitsu.  While some of my like-minded wrestling teammates had successfully moved on to a career in MMA, mine's came to a crashing halt upon the realization I didn't take too kindly to getting punched in the face as I orignally thought.  Guess Mike Tyson was right, "*Everyone has a plan until they get punched in the mouth*".  Despite dreams being dashed, I still remain an avid MMA fan and grappling hobbyist. 
+![](https://images.unsplash.com/photo-1594623274890-6b45ce7cf44a?ixid=MXwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHw%3D&ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80)
+
+While the idea of being like them was great and all, I kind of knew it wasn't really going to be in the cards being one of the smallest person in my class with almost zero ability to skate backwards or dribble the ball with my feet. However, despite being ready to complete close that aspiration, there was an emerging sport that had both captured my attention and gave me a glimmer of hope in pursuing a professional atheletic career.  That was mixed martial arts.  
+
+Mixed martial arts (or MMA) had everything I liked about sports: an array of technical skills and strategies to solve complex problems with dire consequences, a growing and passionate fandom, and be a platform to display a triumph of human will in its truest sense.  Ever since I saw it for the first time, I knew I had to give it a shot.  As I gotten older, I thought this was a realistic possibility after having wrestled in college and taking up some other necessary skills along the way in the form of Muay Thai and Brazilian Jiu-Jitsu.  While some of my like-minded wrestling teammates had since moved on to a career in sport, mine's came to a crashing halt upon the realization I didn't take too kindly to getting punched in the face as I orignally thought.  I guess Mike Tyson was right, "*Everyone has a plan until they get punched in the mouth*".  Despite dreams being dashed, I still remain an avid MMA fan and grappling hobbyist. 
+
+Being an avid MMA fan, or anything eally, there is a strange dichotomy that we all experience. That is the division between the casuals and the hardcore. While I understand that we hardcore fans are in the vast minority, we still expect some representation in the face of the general population.  However, in recent memory, 
