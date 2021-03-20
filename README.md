@@ -40,6 +40,8 @@ With these analysts being so hit-or-miss with these outcomes, I figured I could 
 
 ![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/UFC_Outcome_Prediction_Recap.PNG)
 
-* With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), 
+* With reference to actual fight outcomes from [UFC 258](https://en.wikipedia.org/wiki/UFC_258), it was shown that the chosen approach of using a logistic regression model with variable selection using correlates outperformed the projected mma analysis.  
+
+![](https://github.com/Vibe1990/UFC_Model.Prediction/blob/main/Compare_model_picks_vs_analysis.PNG)
 
 
