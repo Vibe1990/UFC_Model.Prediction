@@ -12,7 +12,7 @@ This repository contains code and data used in demonstrating various supervised 
 
 ## Introduction
 
-When I was growing up in the late 90's to early 2000's, we all looked up to players like Kobe Bryant (RIP), Brendan Shanahan, or Ronaldo.  To us, they were essentially gods personified, and we all had taken turns being like them during pick-up games at the local park or on the street in front of our homes. Well, in between the car passing by every 5-10 minutes. 
+When I was growing up in the late 90's to early 2000's, we all looked up to players like Kobe Bryant (RIP), Brendan Shanahan, or Ronaldo.  To us, they were essentially gods personified, and we all had taken turns being like them during pick-up games at the local park or on the street in front of our homes. Well, in between the cars passing by every 5-10 minutes. 
 
 ![](https://images.unsplash.com/photo-1594623274890-6b45ce7cf44a?ixid=MXwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHw%3D&ixlib=rb-1.2.1&auto=format&fit=crop&w=1050&q=80)
 
