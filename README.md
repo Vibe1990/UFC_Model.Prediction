@@ -1,6 +1,8 @@
 # How a fan who got tired of bad MMA commentary built a predictive model that did a better job than MMA analysts.
 
-This repository contains code and data used in demonstrating various supervised machine learning algorithms to predict fight outcomes in the largest mixed martial arts organization in the world, the [UFC](www.ufc.com), using the R language.  Read the full article [here](https://medium.com/analytics-vidhya/can-an-mma-fan-use-machine-learning-to-do-a-better-job-than-the-mma-analysts-d1404c309ac6)
+This repository contains code and data used in demonstrating various supervised machine learning algorithms to predict fight outcomes in the largest mixed martial arts organization in the world, the [UFC](www.ufc.com), using the R language.  
+
+Read the full article [here](https://medium.com/analytics-vidhya/can-an-mma-fan-use-machine-learning-to-do-a-better-job-than-the-mma-analysts-d1404c309ac6)
 
 
 ## TABLE OF CONTENTS
